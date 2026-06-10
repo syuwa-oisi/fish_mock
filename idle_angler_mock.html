@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Idle Angler — 釣果が経済になる放置釣りモック</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap');
+  :root{
+    --bg:#0d1117; --panel:#101a2c; --panel2:#16233a; --line:#27374f;
+    --txt:#e2ecf9; --dim:#7e8eaa; --acc:#3fb6ff; --warm:#ffb74a; --gold:#ffd76a;
+    --rc:#9fb0cc; --rr:#56b9ff; --re:#c77dff; --rl:#ffd76a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:'M PLUS Rounded 1c',sans-serif;
+    min-height:100vh;overflow:hidden;
+    background-image:
+      linear-gradient(rgba(127,142,170,.05) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(127,142,170,.05) 1px,transparent 1px);
+    background-size:48px 48px}
+  /* ── 背景＝作業画面のイメージ ── */
+  .desk{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .desk .inner{max-width:520px;text-align:center;color:var(--dim);line-height:1.9;font-size:13px}
+  .desk h1{font-family:'DotGothic16',monospace;font-size:30px;color:#3a4a66;letter-spacing:3px;margin-bottom:10px}
+  .desk .pill{display:inline-block;border:1px solid var(--line);border-radius:99px;padding:2px 12px;margin:2px;font-size:11px}
+  /* ── 常駐部＝ボーダレスな情景のみ ── */
+  #widget{position:fixed;width:408px;height:190px;z-index:10}
+  #widget.pos-br{right:14px;bottom:10px} #widget.pos-bl{left:14px;bottom:10px}
+  #widget.pos-tr{right:14px;top:10px}   #widget.pos-tl{left:14px;top:10px}
+  #widget.pos-c{left:50%;top:50%;transform:translate(-50%,-50%)}
+  canvas{display:block;background:transparent}
+  /* ホバーで現れる操作ボタン */
+  #fabs{position:absolute;top:2px;right:6px;display:flex;gap:6px;opacity:0;transition:.25s}
+  #widget:hover #fabs{opacity:1}
+  .fab{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);cursor:pointer;
+    background:rgba(16,26,44,.88);color:var(--txt);font-size:13px;line-height:1;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;position:relative}
+  .fab:hover{border-color:var(--acc);color:var(--acc)}
+  #fabMenu{opacity:.45;transition:.25s}
+  #widget:hover #fabMenu{opacity:1}
+  #fabBadge{position:absolute;top:-4px;right:-5px;background:var(--warm);color:#0d1117;
+    font-size:9px;font-weight:800;border-radius:99px;min-width:15px;height:15px;
+    display:flex;align-items:center;justify-content:center;padding:0 3px}
+  /* ホバーで現れるHUDチップ */
+  #hudHover{position:absolute;top:6px;left:8px;display:flex;gap:5px;font-size:11px;
+    opacity:0;transition:.25s;pointer-events:none}
+  #widget:hover #hudHover{opacity:1}
+  #hudHover .chip{background:rgba(16,26,44,.88);border:1px solid var(--line);border-radius:7px;padding:1px 8px}
+  #hudHover b{color:var(--gold);font-weight:800}
+  #hudHover .buff{color:#7ef0c0}
+  /* ── ポップアップ ── */
+  .pop{position:absolute;right:0;width:344px;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.6);display:none;z-index:30}
+  #widget.pos-br .pop,#widget.pos-bl .pop,#widget.pos-c .pop{bottom:calc(100% + 6px)}
+  #widget.pos-tr .pop,#widget.pos-tl .pop{top:calc(100% + 6px)}
+  #widget.pos-bl .pop,#widget.pos-tl .pop{left:0;right:auto}
+  #menu{width:168px;padding:6px}
+  #menu button{display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:none;
+    color:var(--txt);font-family:inherit;font-size:13px;font-weight:700;padding:8px 10px;
+    border-radius:8px;cursor:pointer;text-align:left}
+  #menu button:hover{background:var(--panel2);color:var(--acc)}
+  #menu button small{margin-left:auto;color:var(--dim);font-weight:500}
+  #popup header{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line)}
+  #popup header .t{font-family:'DotGothic16',monospace;font-size:13px;letter-spacing:2px;color:var(--acc)}
+  #popup header .x{margin-left:auto;background:transparent;border:none;color:var(--dim);
+    font-size:15px;cursor:pointer;font-family:inherit;padding:0 2px}
+  #popup header .x:hover{color:var(--txt)}
+  #popBody{padding:9px 11px;max-height:300px;overflow-y:auto}
+  #log{font-size:11px;color:var(--dim);height:40px;overflow-y:auto;line-height:1.55;
+    padding:5px 12px;border-top:1px solid var(--line)}
+  /* リスト行 */
+  .row{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+    border-left-width:4px;border-radius:7px;padding:5px 8px;margin-bottom:5px;font-size:12px}
+  .row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .sub{color:var(--dim);font-size:10px}
+  .bl-0{border-left-color:var(--rc)!important}.bl-1{border-left-color:var(--rr)!important}
+  .bl-2{border-left-color:var(--re)!important}.bl-3{border-left-color:var(--rl)!important}
+  .r0{color:var(--rc)}.r1{color:var(--rr)}.r2{color:var(--re)}.r3{color:var(--rl)}
+  .ab{background:#0c1322;border:1px solid var(--line);color:var(--txt);border-radius:5px;
+    font-family:inherit;font-size:11px;padding:2px 7px;cursor:pointer;white-space:nowrap}
+  .ab:hover{border-color:var(--acc);color:var(--acc)}
+  .ab.gold:hover{border-color:var(--gold);color:var(--gold)}
+  .ab.on{border-color:var(--acc);color:var(--acc)}
+  .ab:disabled{opacity:.35;cursor:not-allowed}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);
+    margin:8px 0 6px;border-left:3px solid var(--acc);padding-left:7px}
+  .hintx{font-size:11px;color:var(--dim);margin-bottom:6px;line-height:1.6}
+  select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;
+    padding:3px 6px;font-family:inherit;font-size:12px}
+  .setrow{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+  .setrow .lbl{color:var(--dim);width:64px}
+  /* 水槽 */
+  .aqua{display:flex;gap:6px;margin-bottom:4px}
+  .aslot{flex:1;height:52px;background:linear-gradient(#0d2238,#0a1a2c);border:1px dashed var(--line);
+    border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    font-size:10px;color:var(--dim);cursor:pointer;text-align:center;line-height:1.3}
+  .aslot.f{border-style:solid}
+  .dex{display:flex;flex-wrap:wrap;gap:4px}
+  .dx{font-size:10px;border:1px solid var(--line);border-radius:5px;padding:2px 7px;background:var(--panel2)}
+  .dx.unk{color:#4a5b78}
+  /* 市場 */
+  .quote{display:flex;gap:6px;margin-bottom:7px}
+  .quote .q{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+    padding:4px 8px;font-size:11px;text-align:center}
+  .quote .q b{font-size:13px}
+  .up{color:#7ef0c0}.dn{color:#ff7d6b}
+  /* トースト */
+  #toast{position:absolute;left:50%;top:-34px;transform:translateX(-50%);background:rgba(10,18,32,.93);
+    border:1px solid var(--gold);color:var(--gold);border-radius:9px;padding:6px 15px;font-size:12px;
+    font-weight:800;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;z-index:40}
+  #toast.show{opacity:1}
+  ::-webkit-scrollbar{width:7px} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+</style>
+</head>
+<body>
+
+<div class="desk"><div class="inner">
+  <h1>IDLE ANGLER</h1>
+  <div>（この背景は作業画面のイメージ — 常駐するのは釣り人と水面だけ）</div>
+  <div style="margin-top:10px">
+    <span class="pill">ホバーで ☰ メニュー — 魚箱/装備/水槽/市場はポップアップ</span><br>
+    <span class="pill">釣った魚の使い道は4つ: 餌 / 捌く / 飾る / 放流</span>
+    <span class="pill">餌の格上げ連鎖 → 頂点魚</span><br>
+    <span class="pill">市場はローカル需給シミュ — RMT/Steam Marketは同一APIで外付け予定</span>
+  </div>
+</div></div>
+
+<div id="widget" class="pos-br">
+  <div id="hudHover">
+    <div class="chip">💰 <b id="hGold">0</b>G</div>
+    <div class="chip">🎣 <b id="hCatch">0</b></div>
+    <div class="chip" id="hWx">☀️ 昼・晴</div>
+    <div class="chip buff" id="hBuff" style="display:none"></div>
+  </div>
+  <div id="fabs">
+    <button class="fab" id="spdBtn" title="デモ用倍速">×1</button>
+    <button class="fab" id="dockBtn" title="配置を切り替え">📌</button>
+    <button class="fab" id="fabMenu" title="メニュー">☰<span id="fabBadge">0</span></button>
+  </div>
+  <canvas id="cv" width="408" height="190"></canvas>
+
+  <div id="menu" class="pop">
+    <button onclick="openPopup('box')">🐟 魚箱 <small id="mBox"></small></button>
+    <button onclick="openPopup('eq')">🎣 装備</button>
+    <button onclick="openPopup('aq')">🐠 水槽・図鑑</button>
+    <button onclick="openPopup('mkt')">🏪 市場</button>
+    <button onclick="openPopup('set')">⚙ 設定</button>
+  </div>
+  <div id="popup" class="pop">
+    <header><span class="t" id="popTtl"></span><button class="x" onclick="closePopup()">✕</button></header>
+    <div id="popBody"></div>
+    <div id="log"></div>
+  </div>
+  <div id="toast"></div>
+</div>
+
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=Math.random;
+
+/* ───────────────────────── データ定義 ───────────────────────── */
+const RAR=[
+  {k:0,n:'コモン',  col:'#9fb0cc',mult:1.0},
+  {k:1,n:'レア',    col:'#56b9ff',mult:1.6},
+  {k:2,n:'エピック',col:'#c77dff',mult:2.4},
+  {k:3,n:'レジェンド',col:'#ffd76a',mult:4.0},
+];
+const SPOTS=[
+  {n:'渓流',   cost:0,    water:'#1b4a44'},
+  {n:'港・汽水',cost:600,  water:'#123a5e'},
+  {n:'深海船上',cost:4000, water:'#101a3e'},
+];
+// bq=必要餌Tier(0=練り餌可) cond=出現条件
+const SPECIES=[
+  {id:'ugui',  n:'ウグイ',        s:0,r:0,v:8},
+  {id:'yamame',n:'ヤマメ',        s:0,r:0,v:12},
+  {id:'kajika',n:'カジカ',        s:0,r:0,v:10},
+  {id:'iwana', n:'イワナ',        s:0,r:1,v:36},
+  {id:'niji',  n:'ニジマス',      s:0,r:1,v:44},
+  {id:'ayu',   n:'アユ',          s:0,r:2,v:160,bq:1},
+  {id:'itou',  n:'イトウ',        s:0,r:2,v:220,bq:1},
+  {id:'nushi', n:'ヌシ・オオイワナ',s:0,r:3,v:1200,bq:2,cond:'rain'},
+  {id:'aji',   n:'アジ',          s:1,r:0,v:10},
+  {id:'saba',  n:'サバ',          s:1,r:0,v:12},
+  {id:'kasago',n:'カサゴ',        s:1,r:0,v:14},
+  {id:'seabass',n:'シーバス',     s:1,r:1,v:50},
+  {id:'kurodai',n:'クロダイ',     s:1,r:1,v:55},
+  {id:'hirame',n:'ヒラメ',        s:1,r:2,v:200,bq:1},
+  {id:'tachiuo',n:'タチウオ',     s:1,r:2,v:240,bq:1,cond:'night'},
+  {id:'seadra',n:'幻影シードラゴン',s:1,r:3,v:1800,bq:2,cond:'night'},
+  {id:'sokodara',n:'ソコダラ',    s:2,r:0,v:18},
+  {id:'yumekasago',n:'ユメカサゴ',s:2,r:0,v:20},
+  {id:'kinme', n:'キンメダイ',    s:2,r:1,v:70},
+  {id:'rabuka',n:'ラブカ',        s:2,r:1,v:90},
+  {id:'demenigisu',n:'デメニギス',s:2,r:2,v:320,bq:1},
+  {id:'ryugu', n:'リュウグウノツカイ',s:2,r:3,v:2400,bq:2},
+  {id:'abyss', n:'深淵の主',      s:2,r:3,v:6000,bq:3},  // 頂点魚: 特上餌でのみ
+];
+const BAIT=[
+  {n:'練り餌',  price:0,  note:'無限'},
+  {n:'小魚餌',  price:6,  note:'C魚から'},
+  {n:'活き餌',  price:25, note:'R魚から'},
+  {n:'特上餌',  price:90, note:'E/L魚から'},
+];
+// 水槽の恒久バフ（レアリティ別 × サイズ係数）
+const AQ_BUFF=[
+  {spd:.04,rare:0,  txt:'釣り速度+4%'},
+  {spd:0,  rare:.05,txt:'レア率+5%'},
+  {spd:.08,rare:.05,txt:'速度+8% レア+5%'},
+  {spd:.10,rare:.12,txt:'速度+10% レア+12%'},
+];
+// 放流の一時バフ（レアリティ別）
+const REL_BUFF=[
+  {spd:.20,rare:0,  d:60, txt:'速度+20% 60秒'},
+  {spd:0,  rare:.25,d:60, txt:'レア率+25% 60秒'},
+  {spd:.30,rare:.30,d:90, txt:'両方+30% 90秒'},
+  {spd:.50,rare:.50,d:120,txt:'フィーバー+50% 120秒'},
+];
+const EQT=[
+  {k:'reel', n:'リール', icon:'🎚', stat:'spd', min:8,max:22},
+  {k:'lure', n:'ルアー', icon:'🪝', stat:'rare',min:6,max:18},
+  {k:'charm',n:'お守り', icon:'🧿', stat:'size',min:6,max:16},
+];
+const EQ_PRE=['古びた','頑丈な','精巧な','伝説の'];
+const BOX_CAP=30;
+
+/* ───────────────────────── 状態 ───────────────────────── */
+let S={
+  gold:80, spot:0, rodLv:1, baitSel:0,
+  bait:{1:0,2:0,3:0},
+  autoB:false,
+  box:[],            // {sp:種index, sz:サイズ係数}
+  equip:{reel:null,lure:null,charm:null},
+  eqInv:[],
+  aqua:[null,null,null], aquaMax:3,
+  dex:{},            // id -> {c,mx}
+  buffs:[],          // {spd,rare,until,txt}
+  unlocked:[true,false,false],
+  catches:0,
+  gt:0,              // ゲーム内経過秒
+  ts:Date.now(),
+};
+let speed=1, dockIdx=0;
+const DOCKS=['pos-br','pos-bl','pos-tl','pos-tr','pos-c'];
+let castT=0, anim=null, openPop=null;
+const POP_TITLE={box:'魚箱',eq:'装備',aq:'水槽・図鑑',mkt:'市場',set:'設定'};
+
+/* ───────────────────────── 天候・時間帯 ───────────────────────── */
+const PHASES=[{n:'朝',i:'🌅'},{n:'昼',i:'☀️'},{n:'夕',i:'🌇'},{n:'夜',i:'🌙'}];
+const PHASE_LEN=75, CYCLE=PHASE_LEN*4;
+let wxCycle=-1, weather='晴';
+function phaseIdx(){return ((Math.floor(S.gt/PHASE_LEN)%4)+4)%4}
+function tickWeather(){
+  const c=Math.floor(S.gt/CYCLE);
+  if(c!==wxCycle){wxCycle=c;const r=rnd();weather=r<.55?'晴':r<.85?'雨':'霧';
+    if(wxCycle>0)log(`天候が「${weather}」に変わった`);}
+}
+const WX_ICON={'晴':'☀️','雨':'🌧','霧':'🌫'};
+
+/* ───────────────────────── ステータス集計 ───────────────────────── */
+function stats(){
+  let spd=1+(S.rodLv-1)*0.12, rare=0, size=0, sell=0;
+  for(const k of ['reel','lure','charm']){const e=S.equip[k];if(!e)continue;
+    spd+=(e.spd||0)/100; rare+=(e.rare||0)/100; size+=(e.size||0)/100; sell+=(e.sell||0)/100;}
+  for(const a of S.aqua){if(!a)continue;const b=AQ_BUFF[SPECIES[a.sp].r];
+    spd+=b.spd*a.sz; rare+=b.rare*a.sz;}
+  for(let i=0;i<SPOTS.length;i++){if(dexComplete(i))rare+=.05;}
+  for(const b of S.buffs){spd+=b.spd;rare+=b.rare;}
+  if(weather==='雨')rare+=.10;
+  if(weather==='霧')size+=.10;
+  return {spd,rare,size,sell};
+}
+function dexComplete(spot){
+  return SPECIES.filter(x=>x.s===spot).every(x=>S.dex[x.id]);
+}
+
+/* ───────────────────────── 釣りコア ───────────────────────── */
+function effBait(){let t=S.baitSel;while(t>0&&S.bait[t]<=0)t--;return t;}
+function condOk(sp){
+  if(!sp.cond)return true;
+  if(sp.cond==='rain')return weather==='雨';
+  if(sp.cond==='night')return PHASES[phaseIdx()].n==='夜';
+  return false;
+}
+function pickSpecies(bt,st){
+  const pool=SPECIES.filter(sp=>sp.s===S.spot&&(sp.bq||0)<=bt&&condOk(sp));
+  const cnt=[0,0,0,0];pool.forEach(sp=>cnt[sp.r]++);
+  const BW=[70,22,7,1.4];
+  let tot=0;
+  const ws=pool.map(sp=>{
+    let w=BW[sp.r]/cnt[sp.r];
+    if(sp.r>0)w*=1+st.rare*sp.r;                       // レア率バフ
+    w*=1+0.35*Math.max(0,bt-(sp.bq||0))*sp.r;          // 餌の格上げ連鎖
+    tot+=w;return w;
+  });
+  let r=rnd()*tot;
+  for(let i=0;i<pool.length;i++){r-=ws[i];if(r<=0)return pool[i];}
+  return pool[pool.length-1];
+}
+function doCatch(silent){
+  const st=stats(), bt=effBait();
+  const sp=pickSpecies(bt,st);
+  if(bt>0)S.bait[bt]--;
+  let sz=0.7+rnd()*0.6+rnd()*0.2;
+  sz=clamp(sz*(1+st.size),0.5,2.0);
+  sz=Math.round(sz*100)/100;
+  const idx=SPECIES.indexOf(sp);
+  const fish={sp:idx,sz};
+  S.catches++;
+  const d=S.dex[sp.id]||(S.dex[sp.id]={c:0,mx:0});
+  const isNew=d.c===0;
+  d.c++;d.mx=Math.max(d.mx,sz);
+  // 自動餌化（C/Rの半分）
+  if(S.autoB&&sp.r<2&&rnd()<.5){addBait(fish);}
+  else if(S.box.length>=BOX_CAP){
+    const g=Math.round(sp.v*sz*0.6);S.gold+=g;
+    if(!silent)log(`魚箱が満杯… 行商人が${sp.n}を${g}Gで買い取った`);
+  }else{
+    S.box.push(fish);
+  }
+  if(!silent){
+    if(sp.r>=2||isNew)toast(`${isNew?'✨初':'🎉'} ${sp.n} ×${sz} を釣り上げた！`);
+    log(`<span class="r${sp.r}">${sp.n}</span> ×${sz} を釣った${bt>0?`（${BAIT[bt].n}）`:''}`);
+    anim={p:0,r:sp.r,sz};
+  }
+  renderHud();renderPane();
+}
+
+/* ───────────────────────── 魚の4分岐 ───────────────────────── */
+function addBait(fish){
+  const r=SPECIES[fish.sp].r;
+  const t=r>=2?3:r+1;
+  const q=1+(r>=2?1:0);
+  S.bait[t]+=q;
+  return {t,q};
+}
+window.actBait=i=>{
+  const f=S.box[i];if(!f)return;
+  const {t,q}=addBait(f);S.box.splice(i,1);
+  log(`${SPECIES[f.sp].n}を捌いて<b>${BAIT[t].n}×${q}</b>にした`);
+  renderAll();
+};
+window.actFillet=i=>{
+  const f=S.box[i];if(!f)return;
+  const sp=SPECIES[f.sp],st=stats();
+  const g=Math.round(sp.v*f.sz*(1+st.sell));
+  S.gold+=g;S.box.splice(i,1);
+  log(`${sp.n}を捌いて<b>${g}G</b>を得た`);
+  // 飲み込み装備ドロップ
+  const SW=[.05,.15,.35,.70];
+  if(rnd()<SW[sp.r]){
+    const e=mkEquip(sp.r);S.eqInv.push(e);
+    toast(`💎 ${sp.n}が${e.name}を飲み込んでいた！`);
+    log(`<span class="r${e.r}">${e.name}</span>を入手（${e.txt}）`);
+  }
+  renderAll();
+};
+window.actDeco=i=>{
+  const f=S.box[i];if(!f)return;
+  const slot=S.aqua.findIndex(a=>a===null);
+  if(slot<0){toast('水槽が満員！');return;}
+  S.aqua[slot]=f;S.box.splice(i,1);
+  const sp=SPECIES[f.sp];
+  log(`${sp.n}を水槽に飾った（${AQ_BUFF[sp.r].txt}×サイズ${f.sz}）`);
+  renderAll();
+};
+window.actRelease=i=>{
+  const f=S.box[i];if(!f)return;
+  const sp=SPECIES[f.sp],b=REL_BUFF[sp.r];
+  S.buffs.push({spd:b.spd,rare:b.rare,until:S.gt+b.d,txt:b.txt});
+  S.box.splice(i,1);
+  toast(`🌊 ${sp.n}を放流 → ${b.txt}`);
+  log(`${sp.n}を放流した（${b.txt}）`);
+  renderAll();
+};
+window.actSellFish=i=>{
+  const f=S.box[i];if(!f)return;
+  const g=Market.sellFish(f);S.box.splice(i,1);
+  log(`市場で${SPECIES[f.sp].n}を<b>${g}G</b>で売却（手数料10%）`);
+  renderAll();
+};
+window.actAquaBack=i=>{
+  const f=S.aqua[i];if(!f)return;
+  if(S.box.length>=BOX_CAP){toast('魚箱が満杯');return;}
+  S.box.push(f);S.aqua[i]=null;
+  log(`${SPECIES[f.sp].n}を水槽から出した`);
+  renderAll();
+};
+
+/* ───────────────────────── 装備 ───────────────────────── */
+let eqSeq=0;
+function mkEquip(bias){
+  const t=EQT[Math.floor(rnd()*EQT.length)];
+  const x=rnd()+bias*0.12;
+  const r=x>1.05?3:x>0.85?2:x>0.55?1:0;
+  const v=Math.round((t.min+rnd()*(t.max-t.min))*RAR[r].mult);
+  const e={id:'e'+(eqSeq++),k:t.k,r,name:EQ_PRE[r]+t.n,icon:t.icon};
+  e[t.stat]=v;
+  let txt=({spd:'釣り速度',rare:'レア率',size:'サイズ'})[t.stat]+'+'+v+'%';
+  if(t.k==='charm'){e.sell=Math.round((5+rnd()*12)*RAR[r].mult);txt+=` 売値+${e.sell}%`;}
+  e.txt=txt;
+  e.bv=Math.round((30+v*6)*(1+r));   // 基準価格
+  return e;
+}
+window.actEquip=i=>{
+  const e=S.eqInv[i];if(!e)return;
+  const old=S.equip[e.k];
+  S.equip[e.k]=e;S.eqInv.splice(i,1);
+  if(old)S.eqInv.push(old);
+  log(`${e.name}を装備した（${e.txt}）`);
+  renderAll();
+};
+window.actUnequip=k=>{
+  const e=S.equip[k];if(!e)return;
+  S.equip[k]=null;S.eqInv.push(e);
+  log(`${e.name}を外した`);
+  renderAll();
+};
+window.actSellEq=i=>{
+  const e=S.eqInv[i];if(!e)return;
+  const g=Market.sellEquip(e);S.eqInv.splice(i,1);
+  log(`市場で${e.name}を<b>${g}G</b>で売却`);
+  renderAll();
+};
+window.actRodUp=()=>{
+  const cost=rodCost();
+  if(S.gold<cost||S.rodLv>=8)return;
+  S.gold-=cost;S.rodLv++;
+  toast(`🎣 竿を強化！ Lv${S.rodLv}（速度+12%）`);
+  renderAll();
+};
+function rodCost(){return 100*Math.pow(2,S.rodLv-1)}
+
+/* ──────────────────────────────────────────────────────────────
+   マーケット層 — ローカル需給シミュレーション
+   ★RMT外付けポイント★
+   本モックでは需要が確率的にドリフトし、プレイヤーの売買で
+   価格が動くローカルシミュレーション。将来 Steam Market /
+   外部RMT基盤に接続する場合は、この MarketAPI と同じ形の
+   非同期アダプタ（getQuotes / listings / buy / sellXxx）に
+   差し替えるだけで、ゲーム本体のコードは変更不要にする。
+   ────────────────────────────────────────────────────────────── */
+function createLocalMarketSim(){
+  const q={bait:1,equip:1,fish:1};         // 需要係数 0.6〜1.8
+  const prev={bait:1,equip:1,fish:1};
+  let listings=[],lastDrift=0,lastGen=-999;
+  function bump(k,d){q[k]=clamp(q[k]+d,0.6,1.8)}
+  function genListings(){
+    listings=[];
+    const n=5+Math.floor(rnd()*3);
+    for(let i=0;i<n;i++){
+      const r=rnd();
+      if(r<.4){ // 餌
+        const t=1+Math.floor(rnd()*3),qty=5;
+        listings.push({kind:'bait',t,qty,
+          price:Math.round(BAIT[t].price*qty*q.bait*(0.9+rnd()*0.3))});
+      }else if(r<.75){ // 装備
+        const it=mkEquip(rnd()<.25?2:1);
+        listings.push({kind:'equip',it,
+          price:Math.round(it.bv*q.equip*(0.9+rnd()*0.3))});
+      }else{ // 観賞魚（E/L）
+        const pool=SPECIES.filter(x=>x.r>=2&&x.id!=='abyss');
+        const sp=pool[Math.floor(rnd()*pool.length)];
+        const sz=Math.round((0.8+rnd()*0.6)*100)/100;
+        listings.push({kind:'fish',sp:SPECIES.indexOf(sp),sz,
+          price:Math.round(sp.v*sz*q.fish*(1.1+rnd()*0.4))});
+      }
+    }
+  }
+  return {
+    quotes:()=>q, prevQ:()=>prev, listings:()=>listings,
+    tick(gt){
+      if(gt-lastDrift>=8){lastDrift=gt;
+        for(const k in q){prev[k]=q[k];q[k]=clamp(q[k]*(1+(rnd()-.5)*.08),0.6,1.8);}}
+      if(gt-lastGen>=60){lastGen=gt;genListings();
+        if(openPop==='mkt')renderPane();}
+    },
+    buy(i){
+      const L=listings[i];if(!L||S.gold<L.price)return false;
+      S.gold-=L.price;listings.splice(i,1);
+      if(L.kind==='bait'){S.bait[L.t]+=L.qty;log(`${BAIT[L.t].n}×${L.qty}を購入（${L.price}G）`);bump('bait',+.06);}
+      else if(L.kind==='equip'){S.eqInv.push(L.it);log(`${L.it.name}を購入（${L.price}G）`);bump('equip',+.06);}
+      else{if(S.box.length>=BOX_CAP){toast('魚箱が満杯');S.gold+=L.price;return false;}
+        S.box.push({sp:L.sp,sz:L.sz});log(`${SPECIES[L.sp].n}を購入（${L.price}G）`);bump('fish',+.06);}
+      return true;
+    },
+    sellBait(t){
+      const n=Math.min(5,S.bait[t]);if(n<=0)return 0;
+      const g=Math.floor(BAIT[t].price*n*q.bait*0.9);
+      S.bait[t]-=n;S.gold+=g;bump('bait',-.05);
+      log(`${BAIT[t].n}×${n}を市場で売却（<b>${g}G</b>）`);
+      return g;
+    },
+    sellEquip(e){
+      const g=Math.floor(e.bv*q.equip*0.9);
+      S.gold+=g;bump('equip',-.05);return g;
+    },
+    sellFish(f){
+      const sp=SPECIES[f.sp];
+      const g=Math.floor(sp.v*f.sz*q.fish*0.9);
+      S.gold+=g;bump('fish',-.05);return g;
+    },
+  };
+}
+const Market=createLocalMarketSim();
+window.actBuy=i=>{Market.buy(i);renderAll();};
+window.actSellBait=t=>{Market.sellBait(t);renderAll();};
+window.actAquaUnlock=()=>{
+  if(S.gold<800||S.aquaMax>=5)return;
+  S.gold-=800;S.aquaMax++;S.aqua.push(null);
+  toast('🐠 水槽を拡張した！');renderAll();
+};
+window.actSpotUnlock=i=>{
+  if(S.unlocked[i]||S.gold<SPOTS[i].cost)return;
+  S.gold-=SPOTS[i].cost;S.unlocked[i]=true;S.spot=i;
+  toast(`🗺 ${SPOTS[i].n}を解放！`);renderAll();
+};
+window.actReset=()=>{
+  if(!confirm('セーブデータを初期化しますか？'))return;
+  localStorage.removeItem(SAVE_KEY);location.reload();
+};
+
+/* ───────────────────────── 設定操作（ポップアップから） ───────────────────────── */
+window.setSpot=v=>{
+  const i=+v;
+  if(!S.unlocked[i]){
+    if(S.gold>=SPOTS[i].cost)actSpotUnlock(i);
+    else toast(`解放には ${SPOTS[i].cost}G 必要`);
+    renderPane();return;
+  }
+  S.spot=i;castT=0;log(`${SPOTS[i].n}に移動した`);renderAll();
+};
+window.setBait=v=>{S.baitSel=+v;renderPane();};
+window.setAuto=c=>{S.autoB=c;};
+window.setSpd=n=>{speed=n;$('spdBtn').textContent='×'+n;renderPane();};
+window.dockTo=i=>{dockIdx=i;$('widget').className=DOCKS[i];};
+
+/* ───────────────────────── UI描画 ───────────────────────── */
+function log(m){const l=$('log');l.innerHTML='› '+m+'<br>'+l.innerHTML;
+  if(l.childNodes.length>60)l.innerHTML=l.innerHTML.split('<br>').slice(0,40).join('<br>');}
+let toastTm=0;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');
+  clearTimeout(toastTm);toastTm=setTimeout(()=>t.classList.remove('show'),2600);}
+
+function renderHud(){
+  $('hGold').textContent=Math.floor(S.gold);
+  $('hCatch').textContent=S.catches;
+  const ph=PHASES[phaseIdx()];
+  $('hWx').textContent=`${ph.i} ${ph.n}・${weather}`;
+  $('fabBadge').textContent=S.box.length;
+  $('mBox').textContent=`${S.box.length}/${BOX_CAP}`;
+  const hb=$('hBuff');
+  if(S.buffs.length){
+    const b=S.buffs[S.buffs.length-1];
+    hb.style.display='';hb.textContent=`⚡${b.txt.split(' ')[0]} 残${Math.ceil(b.until-S.gt)}s`;
+  }else hb.style.display='none';
+}
+function fishRow(f,i){
+  const sp=SPECIES[f.sp];
+  const big=f.sz>=1.3?' 💪':'';
+  const sellBtn=sp.r>=2?`<button class="ab gold" onclick="actSellFish(${i})" title="市場相場で売却">売</button>`:'';
+  return `<div class="row bl-${sp.r}">
+    <div class="nm"><span class="r${sp.r}">${sp.n}</span>${big}
+      <div class="sub">サイズ×${f.sz}　基礎値${sp.v}G</div></div>
+    <button class="ab" onclick="actBait(${i})" title="餌にする（格上げ連鎖）">餌</button>
+    <button class="ab" onclick="actFillet(${i})" title="捌いて現金化＋飲み込み装備チャンス">捌</button>
+    <button class="ab" onclick="actDeco(${i})" title="水槽に飾る（恒久バフ）">飾</button>
+    <button class="ab" onclick="actRelease(${i})" title="放流（一時バフ）">放</button>
+    ${sellBtn}</div>`;
+}
+function renderBox(){
+  let h=`<div class="hintx">同じ魚でも使い道で価値が変わる: <b>餌</b>=格上げ連鎖 / <b>捌</b>=現金＋装備 / <b>飾</b>=恒久バフ / <b>放</b>=一時バフ（${S.box.length}/${BOX_CAP}）</div>`;
+  if(!S.box.length)h+='<div class="hintx">まだ魚がいない… ウキを眺めて待とう</div>';
+  S.box.slice().map((f,i)=>({f,i})).sort((a,b)=>SPECIES[b.f.sp].r-SPECIES[a.f.sp].r)
+    .forEach(({f,i})=>h+=fishRow(f,i));
+  $('popBody').innerHTML=h;
+}
+function renderEq(){
+  const st=stats();
+  let h=`<div class="row bl-1"><div class="nm">🎣 竿 Lv${S.rodLv}<div class="sub">基礎速度+${(S.rodLv-1)*12}%</div></div>
+    <button class="ab gold" onclick="actRodUp()" ${S.gold<rodCost()||S.rodLv>=8?'disabled':''}>
+    ${S.rodLv>=8?'MAX':'強化 '+rodCost()+'G'}</button></div>`;
+  h+=`<div class="hintx">合計: 速度×${st.spd.toFixed(2)} / レア+${Math.round(st.rare*100)}% / サイズ+${Math.round(st.size*100)}% / 売値+${Math.round(st.sell*100)}%</div>`;
+  h+='<div class="sec">装備スロット</div>';
+  for(const t of EQT){
+    const e=S.equip[t.k];
+    if(e)h+=`<div class="row bl-${e.r}"><div class="nm">${t.icon} <span class="r${e.r}">${e.name}</span>
+      <div class="sub">${e.txt}</div></div>
+      <button class="ab" onclick="actUnequip('${t.k}')">外す</button></div>`;
+    else h+=`<div class="row bl-0" style="opacity:.55"><div class="nm">${t.icon} ${t.n}<div class="sub">未装備</div></div></div>`;
+  }
+  h+='<div class="sec">所持装備（魚の飲み込みドロップ）</div>';
+  if(!S.eqInv.length)h+='<div class="hintx">なし — 魚を「捌」くと装備を飲み込んでいることがある</div>';
+  S.eqInv.forEach((e,i)=>{
+    const g=Math.floor(e.bv*Market.quotes().equip*0.9);
+    h+=`<div class="row bl-${e.r}"><div class="nm">${e.icon} <span class="r${e.r}">${e.name}</span>
+      <div class="sub">${e.txt}</div></div>
+      <button class="ab" onclick="actEquip(${i})">装着</button>
+      <button class="ab gold" onclick="actSellEq(${i})">売${g}G</button></div>`;
+  });
+  $('popBody').innerHTML=h;
+}
+function renderAq(){
+  let h='<div class="sec">水槽（恒久バフ）</div><div class="aqua">';
+  for(let i=0;i<S.aquaMax;i++){
+    const a=S.aqua[i];
+    if(a){const sp=SPECIES[a.sp];
+      h+=`<div class="aslot f" style="border-color:${RAR[sp.r].col}" onclick="actAquaBack(${i})" title="クリックで魚箱に戻す">
+        <span class="r${sp.r}">${sp.n}</span><span>${AQ_BUFF[sp.r].txt}</span><span>×${a.sz}</span></div>`;
+    }else h+='<div class="aslot">空き<br>魚箱から「飾」</div>';
+  }
+  h+='</div>';
+  if(S.aquaMax<5)h+=`<button class="ab gold" onclick="actAquaUnlock()" ${S.gold<800?'disabled':''}>水槽拡張 800G</button>`;
+  h+='<div class="sec">図鑑</div>';
+  SPOTS.forEach((spot,si)=>{
+    const list=SPECIES.filter(x=>x.s===si);
+    const got=list.filter(x=>S.dex[x.id]).length;
+    h+=`<div class="hintx" style="margin-top:6px"><b>${spot.n}</b> ${got}/${list.length}${dexComplete(si)?' ✅コンプ（レア率+5%）':''}</div><div class="dex">`;
+    list.forEach(x=>{
+      const d=S.dex[x.id];
+      const cond=x.cond==='rain'?'☔雨限定':x.cond==='night'?'🌙夜限定':'';
+      const bq=x.bq?`要${BAIT[x.bq].n}`:'';
+      if(d)h+=`<div class="dx r${x.r}" title="${cond} ${bq}">${x.n} ×${d.c}<br>最大${d.mx}</div>`;
+      else h+=`<div class="dx unk" title="${cond} ${bq}">？？？<br><span style="font-size:9px">${[cond,bq].filter(Boolean).join(' ')||'　'}</span></div>`;
+    });
+    h+='</div>';
+  });
+  $('popBody').innerHTML=h;
+}
+function renderMkt(){
+  const q=Market.quotes(),pq=Market.prevQ();
+  const cat={bait:'餌',equip:'装備',fish:'観賞魚'};
+  let h='<div class="hintx">需要は変動し、売買で価格が動く（ローカルシミュ）。<b>将来ここをRMT/Steam Marketアダプタに差し替え</b></div><div class="quote">';
+  for(const k in cat){
+    const d=q[k]>=pq[k];
+    h+=`<div class="q">${cat[k]}<br><b class="${d?'up':'dn'}">${Math.round(q[k]*100)}%</b> ${d?'▲':'▼'}</div>`;
+  }
+  h+='</div><div class="sec">出品リスト</div>';
+  const L=Market.listings();
+  if(!L.length)h+='<div class="hintx">入荷待ち…</div>';
+  L.forEach((l,i)=>{
+    let nm='',sub='',r=0;
+    if(l.kind==='bait'){nm=`🪱 ${BAIT[l.t].n}×${l.qty}`;sub=BAIT[l.t].note;r=l.t-1;}
+    else if(l.kind==='equip'){nm=`${l.it.icon} ${l.it.name}`;sub=l.it.txt;r=l.it.r;}
+    else{const sp=SPECIES[l.sp];nm=`🐠 ${sp.n}`;sub=`観賞用 サイズ×${l.sz}`;r=sp.r;}
+    h+=`<div class="row bl-${r}"><div class="nm"><span class="r${r}">${nm}</span><div class="sub">${sub}</div></div>
+      <button class="ab gold" onclick="actBuy(${i})" ${S.gold<l.price?'disabled':''}>買 ${l.price}G</button></div>`;
+  });
+  h+='<div class="sec">餌を売る（5個単位・手数料10%）</div>';
+  for(let t=1;t<=3;t++){
+    const g=Math.floor(BAIT[t].price*Math.min(5,S.bait[t])*q.bait*0.9);
+    h+=`<div class="row bl-${t-1}"><div class="nm">🪱 ${BAIT[t].n} 所持×${S.bait[t]}</div>
+      <button class="ab gold" onclick="actSellBait(${t})" ${S.bait[t]<=0?'disabled':''}>売 ${g}G</button></div>`;
+  }
+  h+='<div class="hintx" style="margin-top:6px">装備の売却は「装備」、E/L魚の売却は「魚箱」の「売」から</div>';
+  $('popBody').innerHTML=h;
+}
+function renderSet(){
+  let h='<div class="sec">釣り</div>';
+  h+='<div class="setrow"><span class="lbl">釣り場</span><select onchange="setSpot(this.value)">';
+  SPOTS.forEach((sp,i)=>{
+    h+=`<option value="${i}" ${i===S.spot?'selected':''}>${S.unlocked[i]?sp.n:`🔒${sp.n}（${sp.cost}G）`}</option>`;
+  });
+  h+='</select></div>';
+  h+='<div class="setrow"><span class="lbl">餌</span><select onchange="setBait(this.value)">';
+  BAIT.forEach((b,t)=>{
+    h+=`<option value="${t}" ${t===S.baitSel?'selected':''}>${t===0?`${b.n}（∞）`:`${b.n}×${S.bait[t]}`}</option>`;
+  });
+  h+='</select></div>';
+  h+=`<div class="setrow"><span class="lbl">自動餌化</span>
+    <label style="cursor:pointer"><input type="checkbox" onchange="setAuto(this.checked)" ${S.autoB?'checked':''}> C/R魚の半分を自動で餌に</label></div>`;
+  h+='<div class="sec">表示・デモ</div>';
+  h+='<div class="setrow"><span class="lbl">配置</span>';
+  [['↘',0],['↙',1],['↖',2],['↗',3],['◎',4]].forEach(([s,i])=>{
+    h+=`<button class="ab ${dockIdx===i?'on':''}" onclick="dockTo(${i});renderPane()">${s}</button>`;
+  });
+  h+='</div><div class="setrow"><span class="lbl">倍速</span>';
+  [1,4,20].forEach(n=>{
+    h+=`<button class="ab ${speed===n?'on':''}" onclick="setSpd(${n})">×${n}</button>`;
+  });
+  h+='</div><div class="sec">データ</div>';
+  h+='<button class="ab" onclick="actReset()" style="opacity:.6">セーブ初期化</button>';
+  $('popBody').innerHTML=h;
+}
+function renderPane(){
+  if(!openPop)return;
+  ({box:renderBox,eq:renderEq,aq:renderAq,mkt:renderMkt,set:renderSet})[openPop]();
+}
+function renderAll(){renderHud();renderPane();}
+
+window.openPopup=k=>{
+  openPop=k;
+  $('menu').style.display='none';
+  $('popup').style.display='block';
+  $('popTtl').textContent=POP_TITLE[k];
+  renderPane();
+};
+window.closePopup=()=>{openPop=null;$('popup').style.display='none';};
+
+/* ───────────────────────── Canvas描画（情景のみ・透過） ───────────────────────── */
+const cv=$('cv'),ctx=cv.getContext('2d');
+const CW=408,CH=190,WY=104,WB=70;   // 水面ブロブ: y=WY..WY+WB
+let rainDrops=Array.from({length:46},()=>({x:rnd()*CW,y:rnd()*CH}));
+let bubbles=Array.from({length:8},(_,i)=>({x:30+i*22,y:rnd()*WB}));
+function draw(t){
+  ctx.clearRect(0,0,CW,CH);
+  const ph=phaseIdx();
+  /* ── 水面（角丸ブロブ・これと釣り人だけが常駐ビジュアル） ── */
+  ctx.save();
+  ctx.beginPath();ctx.roundRect(6,WY,CW-12,WB,24);
+  const wg=ctx.createLinearGradient(0,WY,0,WY+WB);
+  wg.addColorStop(0,SPOTS[S.spot].water);wg.addColorStop(1,'#060d18');
+  ctx.fillStyle=wg;ctx.fill();
+  ctx.clip();
+  // 時間帯トーン
+  const TONE=['rgba(255,230,180,.07)','rgba(255,255,255,.05)','rgba(255,150,80,.12)','rgba(8,12,36,.40)'];
+  ctx.fillStyle=TONE[ph];ctx.fillRect(0,WY,CW,WB);
+  // 波
+  ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=1;
+  for(let k=0;k<3;k++){
+    ctx.beginPath();
+    for(let x=0;x<=CW;x+=8){
+      const y=WY+12+k*20+Math.sin(x/26+t*1.1+k*2)*2.2;
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+  // スポット小物
+  if(S.spot===0){ // 岩
+    ctx.fillStyle='rgba(110,125,150,.5)';
+    ctx.beginPath();ctx.ellipse(46,WY+10,16,7,0,0,7);ctx.fill();
+    ctx.beginPath();ctx.ellipse(78,WY+13,10,5,0,0,7);ctx.fill();
+  }else if(S.spot===1){ // ブイ
+    const by2=WY+10+Math.sin(t*1.6)*2;
+    ctx.fillStyle='#c94f3a';ctx.beginPath();ctx.arc(60,by2,6,0,7);ctx.fill();
+    ctx.fillStyle='#e8edf8';ctx.fillRect(58,by2-11,4,6);
+  }else{ // 深海: 泡
+    ctx.fillStyle='rgba(150,200,255,.35)';
+    bubbles.forEach(b=>{b.y-=0.25;if(b.y<4)b.y=WB-6;
+      ctx.beginPath();ctx.arc(b.x,WY+b.y,1.6,0,7);ctx.fill();});
+  }
+  // 月明かりの反射（夜）
+  if(ph===3){
+    ctx.fillStyle='rgba(200,220,255,.10)';
+    for(let i=0;i<5;i++)ctx.fillRect(150+Math.sin(t+i)*8,WY+8+i*12,30-i*4,2);
+  }
+  // 雨・霧（水域内のみ）
+  if(weather==='雨'){
+    ctx.strokeStyle='rgba(160,200,255,.45)';ctx.lineWidth=1;
+    rainDrops.forEach(d=>{
+      d.y+=6;d.x-=1.5;if(d.y>WY+WB){d.y=WY-10;d.x=rnd()*CW+30;}
+      if(d.y>WY-8){ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-2,d.y+7);ctx.stroke();}
+    });
+  }else if(weather==='霧'){
+    ctx.fillStyle='rgba(210,225,240,.13)';
+    ctx.fillRect(0,WY+6+Math.sin(t*.4)*4,CW,18);
+    ctx.fillRect(0,WY+34+Math.cos(t*.3)*4,CW,14);
+  }
+  // 水域内テキスト（情景に馴染む控えめ表示）
+  ctx.fillStyle='rgba(226,236,249,.5)';ctx.font='10px "DotGothic16"';
+  ctx.textAlign='left';
+  ctx.fillText(`${SPOTS[S.spot].n} ${WX_ICON[weather]}${PHASES[ph].i}`,20,WY+18);
+  ctx.fillText(`💰${Math.floor(S.gold)} 🐟${S.catches}`,20,WY+WB-10);
+  ctx.restore();
+  /* ── 桟橋と釣り人 ── */
+  ctx.fillStyle='#5a4632';ctx.fillRect(296,WY-9,112,9);
+  ctx.fillStyle='#3e3022';
+  for(let x=300;x<CW;x+=18)ctx.fillRect(x,WY-9,2,9);
+  ctx.fillRect(316,WY,6,30);ctx.fillRect(378,WY,6,30);
+  const bob=Math.sin(t*1.4)*1.2;
+  ctx.fillStyle='#27405e';ctx.fillRect(346,WY-30+bob,14,18);            // 胴
+  ctx.fillStyle='#f1c27d';ctx.beginPath();ctx.arc(353,WY-36+bob,6,0,7);ctx.fill(); // 顔
+  ctx.fillStyle='#c9543a';ctx.beginPath();ctx.arc(353,WY-39+bob,7,Math.PI,0);ctx.fill(); // 帽子
+  ctx.fillRect(344,WY-39+bob,18,2);
+  ctx.fillStyle='#27405e';ctx.fillRect(344,WY-13+bob,18,5);             // 脚
+  // 夜はランタン
+  if(ph===3){
+    const lg=ctx.createRadialGradient(372,WY-16,2,372,WY-16,26);
+    lg.addColorStop(0,'rgba(255,190,90,.5)');lg.addColorStop(1,'rgba(255,190,90,0)');
+    ctx.fillStyle=lg;ctx.beginPath();ctx.arc(372,WY-16,26,0,7);ctx.fill();
+    ctx.fillStyle='#ffb74a';ctx.fillRect(370,WY-19,5,7);
+  }
+  // 竿と糸
+  ctx.strokeStyle='#caa468';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(348,WY-26+bob);ctx.lineTo(288,WY-56+bob);ctx.stroke();
+  const st=stats();
+  const dur=6/st.spd;
+  const progC=clamp(castT/dur,0,1);
+  const near=progC>0.86;
+  const bx=236,by=WY+8+Math.sin(t*3)*1.5+(near?Math.sin(t*26)*2.4:0);
+  ctx.strokeStyle='rgba(220,230,245,.5)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(288,WY-56+bob);ctx.lineTo(bx,by-3);ctx.stroke();
+  // ウキ
+  ctx.fillStyle='#ff5d3b';ctx.beginPath();ctx.arc(bx,by-2,3,Math.PI,0);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(bx,by+1,3,0,Math.PI);ctx.fill();
+  if(near){ // 波紋
+    const rr=(t*30%14);
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.beginPath();ctx.arc(bx,by,4+rr,0,7);ctx.stroke();
+  }
+  // 釣り上げアニメ
+  if(anim){
+    anim.p+=0.022*speed;
+    const p=anim.p;
+    if(p>=1)anim=null;
+    else{
+      const ax=bx+(350-bx)*p, ay=(by-2)-Math.sin(p*Math.PI)*52;
+      const c=RAR[anim.r].col, w=11*anim.sz;
+      ctx.save();ctx.translate(ax,ay);ctx.rotate(-0.5+p);
+      ctx.fillStyle=c;
+      ctx.beginPath();ctx.ellipse(0,0,w,w*0.42,0,0,7);ctx.fill();
+      ctx.beginPath();ctx.moveTo(w,0);ctx.lineTo(w+6,-4);ctx.lineTo(w+6,4);ctx.fill();
+      ctx.restore();
+      if(anim.r>=2){ctx.fillStyle='rgba(255,215,106,.9)';
+        for(let i=0;i<4;i++)ctx.fillRect(ax-14+rnd()*28,ay-12+rnd()*24,2,2);}
+      if(p<0.25){ctx.strokeStyle='rgba(255,255,255,.5)';
+        ctx.beginPath();ctx.arc(bx,by,p*40,0,7);ctx.stroke();}
+    }
+  }
+  // フィーバー
+  if(S.buffs.some(b=>b.spd>=.5)){
+    ctx.fillStyle='rgba(255,215,106,.8)';
+    for(let i=0;i<5;i++)ctx.fillRect(rnd()*CW,WY-60+rnd()*(WB+60),2,2);
+  }
+  // 残り時間（ウキの近くに小さく）
+  ctx.fillStyle='rgba(226,236,249,.45)';ctx.font='9px "DotGothic16"';
+  ctx.textAlign='center';
+  ctx.fillText(`${Math.max(0,(dur-castT)).toFixed(1)}s`,bx,by+16);
+}
+
+/* ───────────────────────── メインループ ─────────────────────────
+   ロジックは setInterval 駆動（タブが背面でも進行する）。
+   rAF は描画専用。長い停止（スリープ等）はキャッチアップで一括消化。 */
+let lastL=performance.now(),hudTm=0;
+function logicTick(){
+  const now=performance.now();
+  const dt=(now-lastL)/1000;lastL=now;
+  if(dt<=0)return;
+  if(dt>5){ // 停止からの復帰: まとめて消化
+    const st=stats(),dur=6/st.spd;
+    const n=Math.min(400,Math.floor(dt*speed/dur));
+    for(let i=0;i<n;i++)doCatch(true);
+    S.gt+=dt*speed;
+    if(n>2)toast(`💤 留守中に ${n} 匹釣り上げた！`);
+    renderAll();
+    return;
+  }
+  const gdt=dt*speed;
+  S.gt+=gdt;
+  tickWeather();
+  S.buffs=S.buffs.filter(b=>b.until>S.gt);
+  Market.tick(S.gt);
+  castT+=gdt;
+  const dur=6/stats().spd;
+  if(castT>=dur){castT=0;doCatch(false);}
+  hudTm+=dt;
+  if(hudTm>0.5){hudTm=0;renderHud();
+    if(openPop==='mkt')renderMkt(); // 相場のライブ感
+  }
+}
+function frame(now){
+  draw(now/1000);
+  requestAnimationFrame(frame);
+}
+
+/* ───────────────────────── セーブ・オフライン進行 ───────────────────────── */
+const SAVE_KEY='idle_angler_save_v1';
+function save(){S.ts=Date.now();localStorage.setItem(SAVE_KEY,JSON.stringify(S));}
+function load(){
+  const raw=localStorage.getItem(SAVE_KEY);
+  if(!raw)return;
+  try{
+    const sv=JSON.parse(raw);
+    Object.assign(S,sv);
+    // オフライン進行（最大8時間・最大400匹）
+    const elapsed=(Date.now()-sv.ts)/1000;
+    if(elapsed>30){
+      const st=stats();
+      const n=Math.min(400,Math.floor(Math.min(elapsed,8*3600)/(6/st.spd)));
+      for(let i=0;i<n;i++)doCatch(true);
+      if(n>0)setTimeout(()=>toast(`💤 留守中に ${n} 匹釣り上げた！`),600);
+    }
+  }catch(e){console.warn('save load failed',e);}
+}
+
+/* ───────────────────────── イベント ───────────────────────── */
+$('spdBtn').onclick=()=>{setSpd(speed===1?4:speed===4?20:1);};
+$('dockBtn').onclick=()=>{dockTo((dockIdx+1)%DOCKS.length);};
+$('fabMenu').onclick=()=>{
+  const m=$('menu');
+  const showing=m.style.display==='block';
+  m.style.display=showing?'none':'block';
+  if(!showing){closePopup();renderHud();}
+};
+window.addEventListener('beforeunload',save);
+setInterval(save,10000);
+
+/* ───────────────────────── 起動 ───────────────────────── */
+load();
+renderHud();
+log('🎣 釣りを開始。魚は「餌・捌く・飾る・放流」の4つの使い道がある');
+setInterval(logicTick,200);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

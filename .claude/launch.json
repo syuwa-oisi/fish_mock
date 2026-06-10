@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "5566"],
+      "port": 5566
+    },
+    {
+      "name": "angler-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "./idle-angler/node_modules/vite/bin/vite.js",
+        "preview",
+        "idle-angler",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
+    }
+  ]
+}

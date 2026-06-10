@@ -1,0 +1,168 @@
+@import url('https://fonts.googleapis.com/css2?family=DotGothic16&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap');
+:root{
+  --panel:#101a2c; --panel2:#16233a; --line:#27374f;
+  --txt:#e2ecf9; --dim:#7e8eaa; --acc:#3fb6ff; --warm:#ffb74a; --gold:#ffd76a;
+  --rc:#9fb0cc; --rr:#56b9ff; --re:#c77dff; --rl:#ffd76a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent;height:100%;overflow:hidden}
+body{color:var(--txt);font-family:'M PLUS Rounded 1c',sans-serif;user-select:none}
+
+/* ── 常駐部＝ボーダレスな情景のみ（ウィンドウ下端に固定） ── */
+#widget{position:absolute;left:0;bottom:0;width:424px;height:200px}
+body.dock-top #widget{top:0;bottom:auto}
+canvas{display:block;background:transparent;cursor:grab}
+canvas:active{cursor:grabbing}
+/* フロート演出レイヤー */
+#fx{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:15}
+.float{position:absolute;font-size:13px;font-weight:800;white-space:nowrap;
+  text-shadow:0 1px 4px rgba(0,0,0,.7);animation:floatUp 1.4s ease-out forwards}
+.float.gold{color:var(--gold)}
+@keyframes floatUp{
+  0%{transform:translateY(0);opacity:0}
+  15%{opacity:1}
+  100%{transform:translateY(-46px);opacity:0}
+}
+
+/* ブラウザ単体プレビュー用フォールバック（Tauri外） */
+body[data-dock='br'] #widget{position:fixed;left:auto;right:18px;bottom:14px}
+body[data-dock='bl'] #widget{position:fixed;left:18px;bottom:14px}
+body[data-dock='tl'] #widget{position:fixed;left:18px;top:14px;bottom:auto}
+body[data-dock='tr'] #widget{position:fixed;left:auto;right:18px;top:14px;bottom:auto}
+body[data-dock='c']{display:flex;align-items:center;justify-content:center}
+body[data-dock='c'] #widget{position:relative;left:auto;bottom:auto}
+
+/* ホバーで現れる操作ボタン */
+#fabs{position:absolute;top:2px;right:6px;display:flex;gap:6px;opacity:0;transition:.25s;z-index:20}
+#widget:hover #fabs{opacity:1}
+.fab{width:28px;height:28px;border-radius:50%;border:1px solid var(--line);cursor:pointer;
+  background:rgba(16,26,44,.88);color:var(--txt);font-size:13px;line-height:1;font-family:inherit;
+  display:flex;align-items:center;justify-content:center;position:relative}
+.fab:hover{border-color:var(--acc);color:var(--acc)}
+#fabMenu{opacity:.45;transition:.25s}
+#widget:hover #fabMenu{opacity:1}
+#fabBadge{position:absolute;top:-4px;right:-5px;background:var(--warm);color:#0d1117;
+  font-size:9px;font-weight:800;border-radius:99px;min-width:15px;height:15px;
+  display:flex;align-items:center;justify-content:center;padding:0 3px}
+
+/* ホバーで現れるHUDチップ */
+#hudHover{position:absolute;top:6px;left:8px;display:flex;gap:5px;font-size:11px;
+  opacity:0;transition:.25s;pointer-events:none;z-index:20}
+#widget:hover #hudHover{opacity:1}
+#hudHover .chip{background:rgba(16,26,44,.88);border:1px solid var(--line);border-radius:7px;padding:1px 8px}
+#hudHover b{color:var(--gold);font-weight:800}
+#hudHover .buff{color:#7ef0c0}
+
+/* ── ポップアップ ── */
+.pop{position:absolute;right:4px;bottom:calc(100% + 6px);width:416px;background:var(--panel);
+  border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 44px rgba(0,0,0,.6);
+  display:none;z-index:30}
+body.dock-top .pop{top:calc(100% + 6px);bottom:auto}
+#menu{width:168px;padding:6px}
+#menu button{display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:none;
+  color:var(--txt);font-family:inherit;font-size:13px;font-weight:700;padding:8px 10px;
+  border-radius:8px;cursor:pointer;text-align:left}
+#menu button:hover{background:var(--panel2);color:var(--acc)}
+#menu button small{margin-left:auto;color:var(--dim);font-weight:500}
+#popup header{display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line);
+  background:linear-gradient(90deg,rgba(63,182,255,.10),transparent)}
+#popup header .t{font-family:'DotGothic16',monospace;font-size:14px;letter-spacing:2px;color:var(--acc)}
+#popup header .x{margin-left:auto;background:transparent;border:none;color:var(--dim);
+  font-size:15px;cursor:pointer;font-family:inherit;padding:0 2px}
+#popup header .x:hover{color:var(--txt)}
+#popBody{padding:9px 11px;max-height:316px;overflow-y:auto}
+#log{font-size:11px;color:var(--dim);height:40px;overflow-y:auto;line-height:1.55;
+  padding:5px 12px;border-top:1px solid var(--line)}
+
+/* リスト行 */
+.row{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);
+  border-left-width:4px;border-radius:7px;padding:5px 8px;margin-bottom:5px;font-size:12px}
+.row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sub{color:var(--dim);font-size:10px}
+.bl-0{border-left-color:var(--rc)!important}.bl-1{border-left-color:var(--rr)!important}
+.bl-2{border-left-color:var(--re)!important}.bl-3{border-left-color:var(--rl)!important}
+.r0{color:var(--rc)}.r1{color:var(--rr)}.r2{color:var(--re)}.r3{color:var(--rl)}
+.ab{background:#0c1322;border:1px solid var(--line);color:var(--txt);border-radius:5px;
+  font-family:inherit;font-size:11px;padding:2px 7px;cursor:pointer;white-space:nowrap;transition:.12s}
+.ab:hover{border-color:var(--acc);color:var(--acc);transform:translateY(-1px)}
+.ab.gold{border-color:#5a4d28}
+.ab.gold:hover{border-color:var(--gold);color:var(--gold);box-shadow:0 0 8px rgba(255,215,106,.3)}
+.ab.on{border-color:var(--acc);color:var(--acc);box-shadow:0 0 6px rgba(63,182,255,.35)}
+.ab.big{font-size:12px;font-weight:800;padding:5px 12px;border-radius:7px}
+.ab:disabled{opacity:.35;cursor:not-allowed;transform:none}
+/* レアリティ発光 */
+.gl-2{box-shadow:0 0 8px rgba(199,125,255,.22)}
+.gl-3{box-shadow:0 0 10px rgba(255,215,106,.3)}
+.badge{font-size:9px;background:rgba(255,183,74,.18);color:var(--warm);
+  border-radius:99px;padding:0 6px;font-weight:800}
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.statbar{background:linear-gradient(90deg,#16233a,#101a2c);border:1px solid var(--line);
+  border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800;margin-bottom:8px;
+  color:var(--txt);letter-spacing:.5px}
+/* ── 装備2ペイン ── */
+.slots{display:flex;gap:6px;margin-bottom:8px}
+.stile{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:9px;
+  padding:7px 4px;text-align:center;cursor:pointer;transition:.12s}
+.stile:hover{border-color:var(--acc);transform:translateY(-2px)}
+.stile.sel{border-color:var(--acc);box-shadow:0 0 8px rgba(63,182,255,.4)}
+.stile .sicon{font-size:19px;line-height:1.2}
+.stile .snm{font-size:10px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stile .ssub{font-size:9px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ek2{display:flex;gap:8px}
+.ekL{width:152px;max-height:168px;overflow-y:auto;padding-right:2px}
+.ekR{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px;min-height:150px}
+.erow{font-size:11px;background:var(--panel2);border:1px solid var(--line);border-left-width:3px;
+  border-radius:6px;padding:4px 7px;margin-bottom:4px;cursor:pointer;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;transition:.12s}
+.erow:hover{transform:translateX(2px)}
+.erow.sel{border-color:var(--acc);box-shadow:0 0 6px rgba(63,182,255,.3)}
+.dhead{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.dhead .dicon{font-size:24px}
+.dhead .sub{font-size:10px;color:var(--dim)}
+.dstat{font-size:12px;background:#0c1322;border-radius:6px;padding:5px 8px;margin-bottom:6px}
+.dstat.dim{color:var(--dim);font-size:11px}
+.drow{display:flex;gap:6px}
+/* ── スキル ── */
+.skgrid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.skcard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px;transition:.12s}
+.skcard.can{border-color:#5a4d28;box-shadow:0 0 8px rgba(255,215,106,.15)}
+.skcard.maxed{opacity:.65}
+.skcard:hover{transform:translateY(-2px)}
+.skhead{display:flex;align-items:center;gap:6px;font-size:12px}
+.skicon{font-size:17px}
+.skfx{font-size:10px;color:var(--dim);margin:3px 0 5px}
+.pips{display:flex;gap:2px;margin-bottom:6px}
+.pip{width:9px;height:5px;border-radius:3px;background:#1c2940;border:1px solid var(--line)}
+.pip.on{background:var(--acc);border-color:var(--acc);box-shadow:0 0 4px rgba(63,182,255,.6)}
+.skcard .ab{width:100%}
+.sec{font-size:11px;text-transform:uppercase;letter-spacing:2px;color:var(--dim);
+  margin:8px 0 6px;border-left:3px solid var(--acc);padding-left:7px}
+.hintx{font-size:11px;color:var(--dim);margin-bottom:6px;line-height:1.6}
+select{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;
+  padding:3px 6px;font-family:inherit;font-size:12px}
+.setrow{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:12px}
+.setrow .lbl{color:var(--dim);width:64px}
+
+/* 水槽 */
+.aqua{display:flex;gap:6px;margin-bottom:4px}
+.aslot{flex:1;height:52px;background:linear-gradient(#0d2238,#0a1a2c);border:1px dashed var(--line);
+  border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:10px;color:var(--dim);cursor:pointer;text-align:center;line-height:1.3}
+.aslot.f{border-style:solid}
+.dex{display:flex;flex-wrap:wrap;gap:4px}
+.dx{font-size:10px;border:1px solid var(--line);border-radius:5px;padding:2px 7px;background:var(--panel2)}
+.dx.unk{color:#4a5b78}
+
+/* 市場 */
+.quote{display:flex;gap:6px;margin-bottom:7px}
+.quote .q{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+  padding:4px 8px;font-size:11px;text-align:center}
+.quote .q b{font-size:13px}
+.up{color:#7ef0c0}.dn{color:#ff7d6b}
+
+/* トースト（情景の上に重ねる） */
+#toast{position:absolute;left:50%;top:36px;transform:translateX(-50%);background:rgba(10,18,32,.93);
+  border:1px solid var(--gold);color:var(--gold);border-radius:9px;padding:6px 15px;font-size:12px;
+  font-weight:800;opacity:0;transition:.3s;pointer-events:none;white-space:nowrap;z-index:40}
+#toast.show{opacity:1}
+::-webkit-scrollbar{width:7px} ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
