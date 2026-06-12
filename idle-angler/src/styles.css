@@ -81,7 +81,11 @@ body.dock-top .pop{top:calc(100% + 6px);bottom:auto}
 .row .sub{color:var(--dim);font-size:10px}
 .bl-0{border-left-color:var(--rc)!important}.bl-1{border-left-color:var(--rr)!important}
 .bl-2{border-left-color:var(--re)!important}.bl-3{border-left-color:var(--rl)!important}
+.bl-4{border-left-color:#ff8a5c!important}.bl-5{border-left-color:#7ef0c0!important}
+.bl-6{border-left-color:#ff4d8f!important}
 .r0{color:var(--rc)}.r1{color:var(--rr)}.r2{color:var(--re)}.r3{color:var(--rl)}
+.r4{color:#ff8a5c}.r5{color:#7ef0c0}
+.r6{color:#ff4d8f;text-shadow:0 0 6px rgba(255,77,143,.6)}
 .ab{background:#0c1322;border:1px solid var(--line);color:var(--txt);border-radius:5px;
   font-family:inherit;font-size:11px;padding:2px 7px;cursor:pointer;white-space:nowrap;transition:.12s}
 .ab:hover{border-color:var(--acc);color:var(--acc);transform:translateY(-1px)}
@@ -93,8 +97,15 @@ body.dock-top .pop{top:calc(100% + 6px);bottom:auto}
 /* レアリティ発光 */
 .gl-2{box-shadow:0 0 8px rgba(199,125,255,.22)}
 .gl-3{box-shadow:0 0 10px rgba(255,215,106,.3)}
+.gl-4{box-shadow:0 0 10px rgba(255,138,92,.35)}
+.gl-5{box-shadow:0 0 12px rgba(126,240,192,.4)}
+.gl-6{box-shadow:0 0 14px rgba(255,77,143,.5)}
 .badge{font-size:9px;background:rgba(255,183,74,.18);color:var(--warm);
   border-radius:99px;padding:0 6px;font-weight:800}
+.badge.nu{background:rgba(255,215,106,.22);color:var(--gold)}
+.lvbadge{font-size:11px;font-weight:800;color:var(--acc);background:rgba(63,182,255,.12);
+  border:1px solid var(--acc);border-radius:6px;padding:0 8px}
+.lvinf{font-size:11px;color:var(--dim);margin-left:6px}
 .toolbar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
 .statbar{background:linear-gradient(90deg,#16233a,#101a2c);border:1px solid var(--line);
   border-radius:8px;padding:5px 10px;font-size:12px;font-weight:800;margin-bottom:8px;

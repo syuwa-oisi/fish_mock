@@ -8,9 +8,10 @@ export interface Species {
   cond?: 'rain' | 'night';
 }
 
-export interface Fish { sp: number; sz: number }   // sp=SPECIES index
+export interface Fish { sp: number; sz: number; nu?: boolean }   // sp=SPECIES index / nu=ヌシ個体
 
 export type EquipKind = 'reel' | 'lure' | 'charm';
+export type MatKind = 'scale' | 'iri' | 'pearl';
 
 export interface Equip {
   id: string;
@@ -24,6 +25,8 @@ export interface Equip {
   rare?: number;
   size?: number;
   sell?: number;
+  enh?: number;         // 強化Lv
+  enhPct?: number;      // 強化による効果増(%)
 }
 
 export interface Buff { spd: number; rare: number; until: number; txt: string }
@@ -49,6 +52,10 @@ export interface GameState {
   unlocked: boolean[];
   skills: Record<string, number>;   // スキルID → Lv
   ocean: boolean;                   // コーナーフィット大海モード
+  mats: Record<MatKind, number>;    // 鍛冶素材
+  mastery: Record<number, { lv: number; xp: number }>;  // 釣り場熟練度
+  nushiAt: number;                  // 次のヌシ出現(ゲーム秒)
+  nushiWins: number;
   catches: number;
   gt: number;           // ゲーム内経過秒
   ts: number;           // 最終セーブ実時刻（オフライン進行用）
@@ -58,7 +65,7 @@ export interface Skill {
   id: string;
   n: string;
   icon: string;
-  max: number;
+  max?: number;     // 未指定 = 無限パッシブ（効果は線形・価格は指数）
   base: number;     // Lv1の費用
   mult: number;     // レベル毎の費用倍率
   fx: string;       // 効果説明

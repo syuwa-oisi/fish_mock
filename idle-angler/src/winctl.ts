@@ -29,7 +29,9 @@ export async function setCorner(i: number): Promise<void> {
   applyDomDock();
   if (!isTauri) return;
   const win = getCurrentWindow();
-  const mon = (await currentMonitor()) ?? (await primaryMonitor());
+  // 起動直後はウィンドウが仮想ディスプレイ上にあることがあり currentMonitor が
+  // 誤ったモニタを返すため、スナップは常にプライマリモニタ基準で行う
+  const mon = (await primaryMonitor()) ?? (await currentMonitor());
   if (!mon) return;
   const sf = mon.scaleFactor;
   type Area = { position: { x: number; y: number }; size: { width: number; height: number } };

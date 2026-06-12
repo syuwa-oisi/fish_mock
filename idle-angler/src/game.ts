@@ -1,11 +1,12 @@
-import type { CatchAnim, EquipKind, Equip, Fish, GameState, Species, Stats } from './types';
+import type { CatchAnim, EquipKind, Equip, Fish, GameState, MatKind, Species, Stats } from './types';
 import {
-  AQ_BUFF, BAIT, BASE_CAST, BOX_BASE, CYCLE, EQ_PRE, EQT, PHASES, PHASE_LEN,
+  AQ_BUFF, BAIT, BASE_CAST, CYCLE, EQ_PRE, EQT, MATS, PHASES, PHASE_LEN,
   RAR, REL_BUFF, SKILLS, SPECIES, SPOTS, SWALLOW,
 } from './data';
+import { BAL, clamp } from './balance';
 import { log, renderHud, renderPane, spawnFloat, toast } from './ui';
 
-export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+export { clamp };
 const rnd = Math.random;
 
 export const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -25,6 +26,10 @@ export function freshState(): GameState {
     unlocked: [true, false, false],
     skills: {},
     ocean: false,
+    mats: { scale: 0, iri: 0, pearl: 0 },
+    mastery: {},
+    nushiAt: 0,
+    nushiWins: 0,
     catches: 0,
     gt: 0,
     ts: Date.now(),
@@ -33,8 +38,11 @@ export function freshState(): GameState {
 export const S: GameState = freshState();
 
 // 実行時のみの状態（セーブ対象外）
-export const R: { castT: number; anim: CatchAnim | null; speed: number } = {
-  castT: 0, anim: null, speed: 1,
+export const R: {
+  castT: number; anim: CatchAnim | null; speed: number;
+  nushi: { t: number } | null;          // ヌシの前兆（巨影演出）
+} = {
+  castT: 0, anim: null, speed: 1, nushi: null,
 };
 
 /* ───────────────────────── 天候・時間帯 ───────────────────────── */
@@ -58,7 +66,7 @@ export function skillCost(id: string): number {
 }
 export function buySkill(id: string): boolean {
   const sk = SKILLS.find(s => s.id === id);
-  if (!sk || skillLv(id) >= sk.max) return false;
+  if (!sk || (sk.max !== undefined && skillLv(id) >= sk.max)) return false;
   const cost = skillCost(id);
   if (S.gold < cost) return false;
   S.gold -= cost;
@@ -67,18 +75,24 @@ export function buySkill(id: string): boolean {
   spawnFloat(`${sk.icon} Lv UP!`, 'gold');
   return true;
 }
-export function getBoxCap(): number { return BOX_BASE + 5 * skillLv('box'); }
+export function getBoxCap(): number { return BAL.boxBase + BAL.boxPerSkill * skillLv('box'); }
+export function masteryLv(spot: number): number { return S.mastery[spot]?.lv ?? 0; }
 
 export function stats(): Stats {
-  let spd = 1 + (S.rodLv - 1) * 0.12, rare = 0, size = 0, sell = 0;
-  spd += 0.08 * skillLv('speed');
-  rare += 0.04 * skillLv('lucky');
-  size += 0.05 * skillLv('big');
-  sell += 0.06 * skillLv('trade');
+  let spd = 1 + (S.rodLv - 1) * BAL.rodSpd, rare = 0, size = 0, sell = 0;
+  // 無限パッシブ（線形）
+  spd += 0.02 * skillLv('speed');
+  rare += 0.015 * skillLv('lucky');
+  size += 0.02 * skillLv('big');
+  sell += 0.02 * skillLv('trade');
+  // 釣り場熟練度（現在の釣り場のみ）
+  const ml = masteryLv(S.spot);
+  spd += BAL.masteryPer * ml; rare += BAL.masteryPer * ml;
   for (const k of ['reel', 'lure', 'charm'] as EquipKind[]) {
     const e = S.equip[k]; if (!e) continue;
-    spd += (e.spd ?? 0) / 100; rare += (e.rare ?? 0) / 100;
-    size += (e.size ?? 0) / 100; sell += (e.sell ?? 0) / 100;
+    const f = 1 + (e.enhPct ?? 0) / 100;   // 強化補正
+    spd += (e.spd ?? 0) * f / 100; rare += (e.rare ?? 0) * f / 100;
+    size += (e.size ?? 0) * f / 100; sell += (e.sell ?? 0) * f / 100;
   }
   for (const a of S.aqua) {
     if (!a) continue;
@@ -129,6 +143,15 @@ export function doCatch(silent: boolean): void {
   const idx = SPECIES.indexOf(sp);
   const fish: Fish = { sp: idx, sz };
   S.catches++;
+  // 釣り場熟練度（1匹=1XP・Lv60まで）
+  const ms = S.mastery[S.spot] ?? (S.mastery[S.spot] = { lv: 0, xp: 0 });
+  if (ms.lv < BAL.masteryMax) {
+    ms.xp++;
+    while (ms.lv < BAL.masteryMax && ms.xp >= BAL.masteryXp(ms.lv)) {
+      ms.xp -= BAL.masteryXp(ms.lv); ms.lv++;
+      if (!silent) { toast(`📈 ${SPOTS[S.spot].n}の熟練 Lv${ms.lv}！（速度・レア+0.5%）`); spawnFloat('📈 熟練UP', 'gold'); }
+    }
+  }
   const d = S.dex[sp.id] ?? (S.dex[sp.id] = { c: 0, mx: 0 });
   const isNew = d.c === 0;
   d.c++; d.mx = Math.max(d.mx, sz);
@@ -170,35 +193,55 @@ export function actBait(i: number): void {
   const { t, q } = addBait(f); S.box.splice(i, 1);
   log(`${SPECIES[f.sp].n}を捌いて<b>${BAIT[t].n}×${q}</b>にした`);
 }
+// 解体素材: C=鱗1 / R=鱗2 / E=虹1+鱗2 / L=虹2。ヌシ個体は＋真珠1
+function filletMats(r: number, nu?: boolean): Partial<Record<MatKind, number>> {
+  const out: Partial<Record<MatKind, number>> =
+    r === 0 ? { scale: 1 } : r === 1 ? { scale: 2 } : r === 2 ? { iri: 1, scale: 2 } : { iri: 2 };
+  if (nu) out.pearl = (out.pearl ?? 0) + 1;
+  return out;
+}
+export function addMats(g: Partial<Record<MatKind, number>>): string {
+  const t: string[] = [];
+  for (const [k, v] of Object.entries(g)) {
+    if (!v) continue;
+    S.mats[k as MatKind] += v;
+    t.push(`${MATS[k].i}×${v}`);
+  }
+  return t.join(' ');
+}
 export function actFillet(i: number): void {
   const f = S.box[i]; if (!f) return;
   const sp = SPECIES[f.sp], st = stats();
-  const g = Math.round(sp.v * f.sz * (1 + st.sell));
+  const g = Math.round(sp.v * f.sz * (1 + st.sell) * (f.nu ? BAL.nushiValueMul : 1));
   S.gold += g; S.box.splice(i, 1);
-  log(`${sp.n}を捌いて<b>${g}G</b>を得た`);
+  const mt = addMats(filletMats(sp.r, f.nu));
+  log(`${sp.n}を捌いて<b>${g}G</b>を得た（${mt}）`);
   spawnFloat(`+${g}G`, 'gold');
   // 飲み込み装備ドロップ
   if (rnd() < SWALLOW[sp.r]) {
     const e = mkEquip(sp.r); S.eqInv.push(e);
     toast(`💎 ${sp.n}が${e.name}を飲み込んでいた！`);
     log(`<span class="r${e.r}">${e.name}</span>を入手（${e.txt}）`);
-    spawnFloat(`💎 ${e.name}`, 'r' + e.r);
+    spawnFloat(`💎 ${e.name}`, 'r' + Math.min(e.r, 3));
   }
 }
-/** C/R魚を一括で捌く（飲み込み判定は個別に行う） */
+/** C/R魚を一括で捌く（飲み込み判定・素材は個別に行う） */
 export function actFilletBulk(): void {
   let n = 0, g = 0, drops = 0;
   const st = stats();
+  const gain: Partial<Record<MatKind, number>> = {};
   for (let i = S.box.length - 1; i >= 0; i--) {
     const f = S.box[i], sp = SPECIES[f.sp];
-    if (sp.r >= 2) continue;
+    if (sp.r >= 2 || f.nu) continue;
     g += Math.round(sp.v * f.sz * (1 + st.sell));
+    for (const [k, v] of Object.entries(filletMats(sp.r))) gain[k as MatKind] = (gain[k as MatKind] ?? 0) + (v ?? 0);
     if (rnd() < SWALLOW[sp.r]) { S.eqInv.push(mkEquip(sp.r)); drops++; }
     S.box.splice(i, 1); n++;
   }
   if (n === 0) { toast('捌けるC/R魚がいない'); return; }
   S.gold += g;
-  log(`C/R魚${n}匹を一括で捌いて<b>${g}G</b>${drops ? `＋装備${drops}個` : ''}`);
+  const mt = addMats(gain);
+  log(`C/R魚${n}匹を一括で捌いて<b>${g}G</b>（${mt}）${drops ? `＋装備${drops}個` : ''}`);
   toast(`🔪 ${n}匹を捌いて +${g}G${drops ? ` 💎×${drops}` : ''}`);
   spawnFloat(`+${g}G`, 'gold');
 }
@@ -227,21 +270,147 @@ export function actAquaBack(i: number): void {
 
 /* ───────────────────────── 装備 ───────────────────────── */
 let eqSeq = 0;
-export function mkEquip(bias: number): Equip {
-  const t = EQT[Math.floor(rnd() * EQT.length)];
-  const x = rnd() + bias * 0.12;
-  const r = x > 1.05 ? 3 : x > 0.85 ? 2 : x > 0.55 ? 1 : 0;
-  const v = Math.round((t.min + rnd() * (t.max - t.min)) * RAR[r].mult);
+// 表示テキストと基準価格を（強化込みで）再構築
+export function rebuildEqText(e: Equip): void {
+  const f = 1 + (e.enhPct ?? 0) / 100;
+  const parts: string[] = [];
+  if (e.spd) parts.push(`釣り速度+${Math.round(e.spd * f)}%`);
+  if (e.rare) parts.push(`レア率+${Math.round(e.rare * f)}%`);
+  if (e.size) parts.push(`サイズ+${Math.round(e.size * f)}%`);
+  if (e.sell) parts.push(`売値+${Math.round(e.sell * f)}%`);
+  e.txt = parts.join(' ') + ((e.enh ?? 0) > 0 ? `　[強化+${e.enh}]` : '');
+  const raw = (e.spd ?? 0) + (e.rare ?? 0) + (e.size ?? 0) + (e.sell ?? 0);
+  e.bv = Math.round((30 + raw * 6 * f) * (1 + e.r));
+}
+// レアリティ抽選: 上位は固定の超低確率（ミシック≈1/20,000は引けたこと自体が誇り）
+function rollEqRar(bias: number): number {
+  const r = rnd();
+  let acc = 0;
+  for (const w of BAL.eqWindows(bias)) { acc += w.p; if (r < acc) return w.idx; }
+  return 0;
+}
+export function buildEquip(r: number, kindIdx?: number): Equip {
+  const t = EQT[kindIdx ?? Math.floor(rnd() * EQT.length)];
+  const roll = r >= 6 ? 1 : rnd();           // ミシックは常に最大ロール
+  const v = Math.round((t.min + roll * (t.max - t.min)) * RAR[r].mult);
   const e: Equip = {
     id: 'e' + (eqSeq++), k: t.k, r, name: EQ_PRE[r] + t.n, icon: t.icon,
     txt: '', bv: 0,
   };
   (e as unknown as Record<string, number>)[t.stat] = v;
-  let txt = ({ spd: '釣り速度', rare: 'レア率', size: 'サイズ' } as Record<string, string>)[t.stat] + '+' + v + '%';
-  if (t.k === 'charm') { e.sell = Math.round((5 + rnd() * 12) * RAR[r].mult); txt += ` 売値+${e.sell}%`; }
-  e.txt = txt;
-  e.bv = Math.round((30 + v * 6) * (1 + r));   // 市場の基準価格
+  if (t.k === 'charm') e.sell = Math.round((5 + (r >= 6 ? 12 : rnd() * 12)) * RAR[r].mult);
+  rebuildEqText(e);
   return e;
+}
+export function mkEquip(bias: number): Equip { return buildEquip(rollEqRar(bias)); }
+
+/* ── ⚒ 鍛冶: 強化（失敗あり）・研磨（再抽選） ── */
+export function enhMatNeed(e: Equip): { kind: MatKind; n: number; pearl: number } {
+  const lv = e.enh ?? 0;
+  return lv < 3
+    ? { kind: 'scale', n: 3 + lv * 2, pearl: 0 }
+    : { kind: 'iri', n: lv - 1, pearl: lv >= 5 ? 1 : 0 };
+}
+export function actEnhance(e: Equip): 'ok' | 'fail' | 'blocked' {
+  const lv = e.enh ?? 0;
+  if (lv >= BAL.enhMax(e.r)) return 'blocked';
+  const need = enhMatNeed(e);
+  if (S.mats[need.kind] < need.n || S.mats.pearl < need.pearl) return 'blocked';
+  S.mats[need.kind] -= need.n; S.mats.pearl -= need.pearl;
+  if (rnd() >= BAL.enhRate[lv]) {
+    log(`⚒ ${e.name}の強化に失敗… 素材が砕けた`);
+    return 'fail';
+  }
+  e.enh = lv + 1; e.enhPct = (e.enhPct ?? 0) + BAL.enhPower;
+  rebuildEqText(e);
+  toast(`⚒ ${e.name} [+${e.enh}] 強化成功！`);
+  spawnFloat('⚒ 強化成功', 'gold');
+  return 'ok';
+}
+export function actReroll(e: Equip): boolean {
+  if (S.mats.pearl < 1) return false;
+  S.mats.pearl--;
+  const t = EQT.find(x => x.k === e.k)!;
+  (e as unknown as Record<string, number>)[t.stat] =
+    Math.round((t.min + rnd() * (t.max - t.min)) * RAR[e.r].mult);
+  if (e.k === 'charm') e.sell = Math.round((5 + rnd() * 12) * RAR[e.r].mult);
+  rebuildEqText(e);
+  toast(`💠 ${e.name} の性能を研磨し直した`);
+  return true;
+}
+
+/* ── ⚗ 合成: 同レア9個 → 確率で1ランク上（失敗は同ランク1個に圧縮） ── */
+export function fuseStock(r: number): number { return S.eqInv.filter(e => e.r === r).length; }
+const fuseKey = (e: Equip): number =>
+  (e.enh ?? 0) * 1000 + (e.spd ?? 0) + (e.rare ?? 0) + (e.size ?? 0) + (e.sell ?? 0);
+export function actFuse(r: number): { ok: boolean; item: Equip } | null {
+  if (r >= RAR.length - 1) return null;
+  const cands = S.eqInv.map((e, i) => ({ e, i }))
+    .filter(x => x.e.r === r)
+    .sort((a, b) => fuseKey(a.e) - fuseKey(b.e))   // 弱い個体から投入（強化済みは温存）
+    .slice(0, BAL.fuseCount);
+  if (cands.length < BAL.fuseCount) return null;
+  const srcKind = EQT.findIndex(t => t.k === cands[Math.floor(rnd() * cands.length)].e.k);
+  cands.sort((a, b) => b.i - a.i).forEach(x => S.eqInv.splice(x.i, 1));
+  const ok = rnd() < (BAL.fuseRate[r] ?? 0);
+  const item = buildEquip(ok ? r + 1 : r, srcKind);
+  S.eqInv.push(item);
+  if (ok) {
+    toast(`⚗ 合成成功！ <${item.name}> が生まれた`);
+    log(`⚗ 合成成功 → <span class="r${Math.min(item.r, 3)}">${item.name}</span>（${item.txt}）`);
+    spawnFloat('⚗ 昇格!', 'gold');
+  } else {
+    toast('⚗ 合成失敗… 1個に圧縮された');
+    log(`⚗ 合成失敗… ${RAR[r].n}1個に圧縮された`);
+  }
+  return { ok, item };
+}
+
+/* ── 👑 ヌシ（主）イベント: 周期的に巨影が現れ、自動ファイトで勝てば特大個体＋真珠 ── */
+export function nushiSpeciesIdx(spot: number): number {
+  const id = spot === 0 ? 'nushi' : spot === 1 ? 'seadra' : 'ryugu';
+  return SPECIES.findIndex(x => x.id === id);
+}
+export function nushiTick(gdt: number): void {
+  if (S.nushiAt <= 0) { S.nushiAt = S.gt + 120 + rnd() * BAL.nushiVar; return; }
+  if (!R.nushi) {
+    if (S.gt >= S.nushiAt) {
+      R.nushi = { t: 0 };
+      toast('❗ ヌシの気配…！');
+      log('巨大な影がウキの下を旋回している…');
+    }
+    return;
+  }
+  R.nushi.t += gdt;
+  if (R.nushi.t < BAL.nushiTelegraph) return;
+  R.nushi = null;
+  S.nushiAt = S.gt + BAL.nushiMin + rnd() * BAL.nushiVar;
+  const st = stats();
+  const p = BAL.nushiChance(st.size, st.rare, masteryLv(S.spot));
+  if (rnd() < p) {
+    const idx = nushiSpeciesIdx(S.spot);
+    const sp = SPECIES[idx];
+    const sz = BAL.nushiSz();
+    S.nushiWins++; S.catches++;
+    const d = S.dex[sp.id] ?? (S.dex[sp.id] = { c: 0, mx: 0 });
+    d.c++; d.mx = Math.max(d.mx, sz);
+    if (S.box.length >= getBoxCap()) {
+      const g = Math.round(sp.v * sz * BAL.nushiValueMul * BAL.merchantRate);
+      S.gold += g;
+      log(`魚箱が満杯… 行商人がヌシを${g}Gで買い取った`);
+    } else {
+      S.box.push({ sp: idx, sz, nu: true });
+    }
+    addMats({ pearl: 1 });
+    toast(`👑 ヌシ・${sp.n} ×${sz} を釣り上げた！！`);
+    log(`<span class="r3">👑 ヌシ・${sp.n}</span> ×${sz} を仕留めた（🦪×1）`);
+    spawnFloat('👑 ヌシ GET!', 'r3');
+    R.anim = { p: 0, r: 3, sz: Math.min(sz, 1.8) };
+  } else {
+    toast('💨 ヌシに逃げられた…');
+    log('ヌシは深みへ消えた… 散らばった' + addMats({ scale: 3 }) + 'を拾った');
+  }
+  renderHud(); renderPane();
 }
 export function actEquip(i: number): void {
   const e = S.eqInv[i]; if (!e) return;
@@ -255,12 +424,12 @@ export function actUnequip(k: EquipKind): void {
   S.equip[k] = null; S.eqInv.push(e);
   log(`${e.name}を外した`);
 }
-export function rodCost(): number { return 100 * Math.pow(2, S.rodLv - 1) }
+export function rodCost(): number { return BAL.rodCost(S.rodLv) }
 export function actRodUp(): void {
   const cost = rodCost();
-  if (S.gold < cost || S.rodLv >= 8) return;
+  if (S.gold < cost || S.rodLv >= BAL.rodMax) return;
   S.gold -= cost; S.rodLv++;
-  toast(`🎣 竿を強化！ Lv${S.rodLv}（速度+12%）`);
+  toast(`🎣 竿を強化！ Lv${S.rodLv}（速度+${Math.round(BAL.rodSpd * 100)}%）`);
 }
 export function actAquaUnlock(): void {
   if (S.gold < 800 || S.aquaMax >= 5) return;
@@ -303,8 +472,8 @@ export async function loadGame(): Promise<void> {
     const elapsed = (Date.now() - sv.ts) / 1000;
     if (elapsed > 30) {
       const st = stats();
-      const cap = 240 + 100 * skillLv('offline');   // 置き竿の心得で上限増
-      const n = Math.min(cap, Math.floor(Math.min(elapsed, 8 * 3600) / (BASE_CAST / st.spd)));
+      const cap = BAL.offlineBase + BAL.offlinePerLv * skillLv('offline');   // 置き竿の心得で上限増
+      const n = Math.min(cap, Math.floor(Math.min(elapsed, BAL.offlineMaxH * 3600) / (BASE_CAST / st.spd)));
       for (let i = 0; i < n; i++) doCatch(true);
       if (n > 0) setTimeout(() => toast(`💤 留守中に ${n} 匹釣り上げた！`), 600);
     }

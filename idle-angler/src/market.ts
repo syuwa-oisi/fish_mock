@@ -81,7 +81,7 @@ export function createLocalMarketSim(): LocalMarket {
     },
     async sellFish(f: Fish) {
       const sp = SPECIES[f.sp];
-      const g = Math.floor(sp.v * f.sz * q.fish * 0.9);
+      const g = Math.floor(sp.v * f.sz * q.fish * 0.9 * (f.nu ? 2 : 1));
       S.gold += g; bump('fish', -.05);
       return g;
     },

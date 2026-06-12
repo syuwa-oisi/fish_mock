@@ -213,6 +213,27 @@ export function draw(t: number): void {
   const by = WY + 8 + Math.sin(t * 3) * 1.5 + (near ? Math.sin(t * 26) * 2.4 : 0);
   ctx.strokeStyle = 'rgba(220,230,245,.5)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(tipX, tipY + bob); ctx.lineTo(bx, by - 3); ctx.stroke();
+  // 👑 ヌシの巨影（前兆: ウキの下を旋回する大きな影）
+  if (R.nushi) {
+    const nt = R.nushi.t;
+    const ox = Math.cos(nt * 1.4) * 26, oy = Math.sin(nt * 2.8) * 6;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, WY + 2, CW, WB - 4); ctx.clip();
+    ctx.fillStyle = 'rgba(6,12,22,.55)';
+    ctx.beginPath(); ctx.ellipse(bx + ox, by + 16 + oy, 34, 10, Math.sin(nt) * 0.25, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(6,12,22,.35)';
+    ctx.beginPath(); ctx.moveTo(bx + ox + 30, by + 16 + oy); ctx.lineTo(bx + ox + 46, by + 10 + oy); ctx.lineTo(bx + ox + 46, by + 22 + oy); ctx.fill();
+    // 激しい波紋
+    ctx.strokeStyle = 'rgba(255,255,255,.3)';
+    const rr2 = (nt * 26) % 20;
+    ctx.beginPath(); ctx.arc(bx, by, 5 + rr2, 0, 7); ctx.stroke();
+    ctx.restore();
+    // ❗マーク（点滅）
+    if (Math.floor(nt * 3) % 2 === 0) {
+      ctx.fillStyle = '#ffd76a'; ctx.font = 'bold 16px "DotGothic16"'; ctx.textAlign = 'center';
+      ctx.fillText('❗', bx, WY - 14);
+    }
+  }
   // ウキ
   ctx.fillStyle = '#ff5d3b'; ctx.beginPath(); ctx.arc(bx, by - 2, 3, Math.PI, 0); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx, by + 1, 3, 0, Math.PI); ctx.fill();

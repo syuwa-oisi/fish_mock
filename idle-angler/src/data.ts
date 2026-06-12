@@ -1,10 +1,14 @@
 import type { Skill, Species } from './types';
 
+// 魚は0..3を使用。装備は0..6の7段階（4以上は「自慢級」の超低確率帯）。
 export const RAR = [
-  { k: 0, n: 'コモン',     col: '#9fb0cc', mult: 1.0 },
-  { k: 1, n: 'レア',       col: '#56b9ff', mult: 1.6 },
-  { k: 2, n: 'エピック',   col: '#c77dff', mult: 2.4 },
-  { k: 3, n: 'レジェンド', col: '#ffd76a', mult: 4.0 },
+  { k: 0, n: 'コモン',         col: '#9fb0cc', mult: 1.0 },
+  { k: 1, n: 'レア',           col: '#56b9ff', mult: 1.6 },
+  { k: 2, n: 'エピック',       col: '#c77dff', mult: 2.4 },
+  { k: 3, n: 'レジェンド',     col: '#ffd76a', mult: 4.0 },
+  { k: 4, n: 'イモータル',     col: '#ff8a5c', mult: 5.5 },
+  { k: 5, n: 'セレスティアル', col: '#7ef0c0', mult: 7.5 },
+  { k: 6, n: 'ミシック',       col: '#ff4d8f', mult: 10 },
 ] as const;
 
 export const SPOTS = [
@@ -69,22 +73,32 @@ export const EQT = [
   { k: 'charm', n: 'お守り', icon: '🧿', stat: 'size', min: 6, max: 16 },
 ] as const;
 
-export const EQ_PRE = ['古びた', '頑丈な', '精巧な', '伝説の'] as const;
+export const EQ_PRE = ['古びた', '頑丈な', '精巧な', '伝説の', '不滅の', '星霜の', '神話の'] as const;
+
+/* ── 鍛冶素材（捌く・ヌシで入手） ── */
+export const MATS: Record<string, { n: string; i: string }> = {
+  scale: { n: '鱗',         i: '🔹' },   // C/R魚から。強化Lv0〜2に使う
+  iri:   { n: '虹色の鱗',   i: '🔷' },   // E/L魚から。強化Lv3以上に使う
+  pearl: { n: '深海の真珠', i: '🦪' },   // ヌシから。研磨(再抽選)と最深強化に使う
+};
 
 export const BOX_BASE = 20;                             // 魚箱の基本枠（スキルで拡張）
 export const SWALLOW = [.05, .15, .35, .70] as const;   // 飲み込み装備率
 export const BASE_CAST = 6;                             // 基本釣り間隔(秒)
 
-/* ── スキル（コインで習得する恒久強化） ── */
+/* ── スキル ──
+   無限パッシブ(maxなし): 効果は線形（+x%/Lv・上限なし）、価格は指数（×1.17〜1.18/Lv）。
+   続ければ確実に強くなるが、時間あたりの成長は対数的に逓減する（数値爆発しない）。
+   アンロック系(maxあり): 節目の機能解放。 */
 export const SKILLS: Skill[] = [
-  { id: 'speed',   n: '速釣り',         icon: '⚡', max: 10, base: 140, mult: 1.6,  fx: '釣り速度 +8%/Lv' },
-  { id: 'lucky',   n: '幸運の釣り糸',   icon: '🍀', max: 10, base: 200, mult: 1.7,  fx: 'レア率 +4%/Lv' },
-  { id: 'big',     n: '大物狙い',       icon: '💪', max: 10, base: 180, mult: 1.65, fx: 'サイズ +5%/Lv' },
-  { id: 'trade',   n: '商才',           icon: '💰', max: 10, base: 160, mult: 1.6,  fx: '売値 +6%/Lv' },
-  { id: 'crit',    n: '一本釣りの極意', icon: '🎯', max: 5,  base: 400, mult: 2.0,  fx: '6%/Lvでダブルヒット' },
-  { id: 'box',     n: '魚箱拡張',       icon: '📦', max: 4,  base: 300, mult: 2.2,  fx: '魚箱 +5枠/Lv' },
-  { id: 'autob',   n: '自動餌化術',     icon: '🪱', max: 5,  base: 250, mult: 1.8,  fx: 'Lv1で解禁・餌化率+10%/Lv' },
-  { id: 'offline', n: '置き竿の心得',   icon: '💤', max: 6,  base: 350, mult: 1.8,  fx: 'オフライン上限 +100匹/Lv' },
+  { id: 'speed',   n: '速釣り',         icon: '⚡', base: 150, mult: 1.20, fx: '釣り速度 +2%/Lv（∞）' },
+  { id: 'lucky',   n: '幸運の釣り糸',   icon: '🍀', base: 200, mult: 1.20, fx: 'レア率 +1.5%/Lv（∞）' },
+  { id: 'big',     n: '大物狙い',       icon: '💪', base: 180, mult: 1.19, fx: 'サイズ +2%/Lv（∞）' },
+  { id: 'trade',   n: '商才',           icon: '💰', base: 170, mult: 1.19, fx: '売値 +2%/Lv（∞）' },
+  { id: 'offline', n: '置き竿の心得',   icon: '💤', base: 300, mult: 1.20, fx: 'オフライン上限 +30匹/Lv（∞）' },
+  { id: 'crit',    n: '一本釣りの極意', icon: '🎯', max: 5, base: 400, mult: 2.0, fx: '6%/Lvでダブルヒット' },
+  { id: 'box',     n: '魚箱拡張',       icon: '📦', max: 4, base: 300, mult: 2.2, fx: '魚箱 +5枠/Lv' },
+  { id: 'autob',   n: '自動餌化術',     icon: '🪱', max: 5, base: 250, mult: 1.8, fx: 'Lv1で解禁・餌化率+10%/Lv' },
 ];
 
 export const PHASES = [

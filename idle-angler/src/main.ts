@@ -1,6 +1,7 @@
 import './styles.css';
 import { BASE_CAST } from './data';
-import { R, S, doCatch, loadGame, saveGame, stats, tickWeather } from './game';
+import * as game from './game';
+import { R, S, doCatch, loadGame, nushiTick, saveGame, stats, tickWeather } from './game';
 import { Market, refreshMarket } from './market';
 import { draw, initRender } from './render';
 import { $, bindUI, currentPop, log, renderAll, renderHud, renderPane, toast } from './ui';
@@ -30,6 +31,7 @@ function logicTick(): void {
   tickWeather();
   S.buffs = S.buffs.filter(b => b.until > S.gt);
   Market.tick(S.gt);
+  nushiTick(gdt);
   R.castT += gdt;
   const dur = BASE_CAST / stats().spd;
   if (R.castT >= dur) { R.castT = 0; doCatch(false); }
@@ -64,4 +66,4 @@ async function boot(): Promise<void> {
 void boot();
 
 // デバッグ・動作検証用（コンソールから状態を触れるように）
-(window as unknown as Record<string, unknown>).IA = { S, R, stats };
+(window as unknown as Record<string, unknown>).IA = { S, R, stats, game };

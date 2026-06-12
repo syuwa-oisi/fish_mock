@@ -1,11 +1,13 @@
 /* UI — ホバーFAB・☰メニュー・ポップアップ
    魚箱 / 装備(スロット盤面＋詳細＋インベントリの2ペイン) / スキル / 水槽図鑑 / 市場 / 設定 */
-import type { Equip, EquipKind, PopKind } from './types';
-import { AQ_BUFF, BAIT, PHASES, RAR, SKILLS, SPECIES, SPOTS } from './data';
+import type { Equip, EquipKind, MatKind, PopKind } from './types';
+import { AQ_BUFF, BAIT, MATS, PHASES, RAR, SKILLS, SPECIES, SPOTS } from './data';
+import { BAL } from './balance';
 import {
-  R, S, Wx, actAquaBack, actAquaUnlock, actBait, actDeco, actEquip, actFillet,
-  actFilletBulk, actRelease, actRodUp, actSpotUnlock, actUnequip, buySkill,
-  dexComplete, getBoxCap, phaseIdx, resetGame, rodCost, skillCost, skillLv, stats,
+  R, S, Wx, actAquaBack, actAquaUnlock, actBait, actDeco, actEnhance, actEquip,
+  actFillet, actFilletBulk, actFuse, actRelease, actReroll, actRodUp, actSpotUnlock,
+  actUnequip, buySkill, dexComplete, enhMatNeed, fuseStock, getBoxCap, masteryLv,
+  phaseIdx, resetGame, rodCost, skillCost, skillLv, stats,
 } from './game';
 import { Market, mktCache, refreshMarket } from './market';
 import { cycleCorner, getCorner, setCorner, setExpanded, setOcean } from './winctl';
@@ -68,7 +70,7 @@ export function renderHud(): void {
 function fishRow(fIdx: number): string {
   const f = S.box[fIdx];
   const sp = SPECIES[f.sp];
-  const big = f.sz >= 1.3 ? ' <span class="badge">💪大物</span>' : '';
+  const big = (f.nu ? ' <span class="badge nu">👑ヌシ</span>' : '') + (f.sz >= 1.3 ? ' <span class="badge">💪大物</span>' : '');
   const sellBtn = sp.r >= 2
     ? `<button class="ab gold" data-act="sellfish" data-i="${fIdx}" title="市場相場で売却">💱売</button>` : '';
   return `<div class="row bl-${sp.r} gl-${sp.r}">
@@ -104,25 +106,64 @@ function slotTile(sel: boolean, icon: string, name: string, sub: string, r: numb
     <div class="snm ${r >= 0 ? 'r' + r : ''}">${name}</div>
     <div class="ssub">${sub}</div></div>`;
 }
+/** 選択中の装備の実体参照（スロット中でもインベントリでも鍛冶できる） */
+function selEquipRef(): Equip | null {
+  if (!eqSel || eqSel.t === 'rod') return null;
+  if (eqSel.t === 'slot') return S.equip[eqSel.k];
+  return S.eqInv[eqSel.i] ?? null;
+}
+// ⚒ 鍛冶セクション（強化・研磨）
+function forgeHtml(e: Equip): string {
+  const lv = e.enh ?? 0;
+  const maxE = BAL.enhMax(e.r);
+  let h = '';
+  if (lv >= maxE) {
+    h += `<div class="dstat dim">⚒ 強化 MAX（+${lv}）</div>`;
+  } else {
+    const need = enhMatNeed(e);
+    const rate = Math.round(BAL.enhRate[lv] * 100);
+    const cost = `${MATS[need.kind].i}×${need.n}${need.pearl ? ` ${MATS.pearl.i}×${need.pearl}` : ''}`;
+    const can = S.mats[need.kind] >= need.n && S.mats.pearl >= need.pearl;
+    h += `<button class="ab big" data-act="enh" ${can ? '' : 'disabled'}
+      title="効果+${BAL.enhPower}%・失敗すると素材だけ消える">⚒ 強化 ${cost}（${rate}%）</button>`;
+  }
+  h += `<button class="ab" data-act="reroll" ${S.mats.pearl < 1 ? 'disabled' : ''}
+    title="性能値を再抽選する">💠 研磨 ${MATS.pearl.i}×1</button>`;
+  return `<div class="drow" style="margin-top:6px">${h}</div>`;
+}
+// ⚗ 合成パネル（未選択時のデフォルト表示）
+function fuseHtml(): string {
+  let h = '<div class="sec" style="margin-top:0">⚗ 合成</div><div class="hintx">同レア9個 → 確率で1ランク上（失敗は1個に圧縮）</div>';
+  for (let r = 0; r < RAR.length - 1; r++) {
+    const st = fuseStock(r);
+    if (st === 0 && r >= 3) continue;
+    const rate = Math.round((BAL.fuseRate[r] ?? 0) * 100);
+    h += `<div class="row bl-${Math.min(r, 6)}"><div class="nm"><span class="r${r}">${RAR[r].n}</span>
+      <div class="sub">所持 ${st}/9 → ${RAR[r + 1].n}（${rate}%）</div></div>
+      <button class="ab gold" data-act="fuse" data-r="${r}" ${st < BAL.fuseCount ? 'disabled' : ''}>⚗ 合成</button></div>`;
+  }
+  return h;
+}
 function eqDetail(): string {
-  if (!eqSel) return '<div class="hintx" style="margin-top:30px;text-align:center">スロット or 装備を選択して詳細を表示</div>';
+  if (!eqSel) return fuseHtml();
   if (eqSel.t === 'rod') {
     const c = rodCost();
     return `<div class="dhead"><span class="dicon">🎣</span><div><b>竿 Lv${S.rodLv}</b><div class="sub">基本装備</div></div></div>
       <div class="dstat">基礎釣り速度 +${(S.rodLv - 1) * 12}%</div>
-      <div class="dstat dim">強化で +12%/Lv（最大Lv8）</div>
-      <button class="ab big gold" data-act="rodup" ${S.gold < c || S.rodLv >= 8 ? 'disabled' : ''}>
-        ${S.rodLv >= 8 ? 'MAX' : `⤴ 強化する ${c}G`}</button>`;
+      <div class="dstat dim">強化で +12%/Lv（最大Lv${BAL.rodMax}）</div>
+      <button class="ab big gold" data-act="rodup" ${S.gold < c || S.rodLv >= BAL.rodMax ? 'disabled' : ''}>
+        ${S.rodLv >= BAL.rodMax ? 'MAX' : `⤴ 強化する ${c}G`}</button>`;
   }
   if (eqSel.t === 'slot') {
     const e = S.equip[eqSel.k];
     if (!e) return '<div class="hintx" style="margin-top:30px;text-align:center">未装備のスロット。<br>インベントリから装備を選んで「装着」</div>';
     return `<div class="dhead"><span class="dicon">${e.icon}</span><div><b class="r${e.r}">${e.name}</b><div class="sub">${RAR[e.r].n}</div></div></div>
       <div class="dstat">${e.txt}</div>
-      <button class="ab big" data-act="uneq" data-k="${e.k}">⤵ 外す</button>`;
+      <button class="ab big" data-act="uneq" data-k="${e.k}">⤵ 外す</button>
+      ${forgeHtml(e)}`;
   }
   const e = S.eqInv[eqSel.i];
-  if (!e) return '';
+  if (!e) return fuseHtml();
   const cur = S.equip[e.k];
   const g = Math.floor(e.bv * mktCache.q.equip * 0.9);
   let cmp = '';
@@ -132,11 +173,13 @@ function eqDetail(): string {
     <div class="drow">
       <button class="ab big" data-act="equip" data-i="${eqSel.i}">⤴ 装着</button>
       <button class="ab big gold" data-act="selleq" data-i="${eqSel.i}">💱 売却 ${g}G</button>
-    </div>`;
+    </div>
+    ${forgeHtml(e)}`;
 }
 function renderEq(): void {
   const st = stats();
-  let h = `<div class="statbar">⚡×${st.spd.toFixed(2)}　🍀+${Math.round(st.rare * 100)}%　💪+${Math.round(st.size * 100)}%　💰+${Math.round(st.sell * 100)}%</div>`;
+  let h = `<div class="statbar">⚡×${st.spd.toFixed(2)}　🍀+${Math.round(st.rare * 100)}%　💪+${Math.round(st.size * 100)}%　💰+${Math.round(st.sell * 100)}%
+    <span style="float:right;color:var(--dim)">${(Object.keys(MATS) as MatKind[]).map(k => `${MATS[k].i}${S.mats[k]}`).join(' ')}</span></div>`;
   // スロット盤面
   h += '<div class="slots">';
   h += slotTile(eqSel?.t === 'rod', '🎣', `竿 Lv${S.rodLv}`, `+${(S.rodLv - 1) * 12}%`, -1, 'esel-rod');
@@ -151,33 +194,45 @@ function renderEq(): void {
   h += '<div class="ek2"><div class="ekL">';
   h += `<div class="sec" style="margin-top:0">インベントリ (${S.eqInv.length})</div>`;
   if (!S.eqInv.length) h += '<div class="hintx">「捌」で飲み込み装備を集めよう</div>';
-  S.eqInv.forEach((e: Equip, i: number) => {
-    const sel = eqSel?.t === 'inv' && eqSel.i === i;
-    h += `<div class="erow bl-${e.r} ${sel ? 'sel' : ''}" data-act="esel-inv" data-i="${i}">
-      ${e.icon} <span class="r${e.r}">${e.name}</span></div>`;
-  });
+  S.eqInv.slice().map((e, i) => ({ e, i }))
+    .sort((a, b) => b.e.r - a.e.r)
+    .forEach(({ e, i }) => {
+      const sel = eqSel?.t === 'inv' && eqSel.i === i;
+      h += `<div class="erow bl-${e.r} ${sel ? 'sel' : ''} ${e.r >= 4 ? 'gl-' + e.r : ''}" data-act="esel-inv" data-i="${i}">
+      ${e.icon} <span class="r${e.r}">${e.name}</span>${(e.enh ?? 0) > 0 ? `<span class="badge">+${e.enh}</span>` : ''}</div>`;
+    });
   h += '</div><div class="ekR">' + eqDetail() + '</div></div>';
   $('popBody').innerHTML = h;
 }
 
 /* ───────────────────────── スキル ───────────────────────── */
-function renderSkill(): void {
-  let h = `<div class="statbar">💰 所持 ${Math.floor(S.gold)}G — コインでスキルを習得して釣りを加速</div><div class="skgrid">`;
-  for (const sk of SKILLS) {
-    const lv = skillLv(sk.id);
-    const maxed = lv >= sk.max;
-    const cost = skillCost(sk.id);
-    const can = !maxed && S.gold >= cost;
+function skillCard(sk: (typeof SKILLS)[number]): string {
+  const lv = skillLv(sk.id);
+  const maxed = sk.max !== undefined && lv >= sk.max;
+  const cost = skillCost(sk.id);
+  const can = !maxed && S.gold >= cost;
+  let gauge: string;
+  if (sk.max === undefined) {
+    gauge = `<div class="pips"><span class="lvbadge">Lv ${lv}</span><span class="lvinf">∞</span></div>`;
+  } else {
     let pips = '';
     for (let i = 0; i < sk.max; i++) pips += `<span class="pip ${i < lv ? 'on' : ''}"></span>`;
-    h += `<div class="skcard ${can ? 'can' : ''} ${maxed ? 'maxed' : ''}">
-      <div class="skhead"><span class="skicon">${sk.icon}</span><b>${sk.n}</b></div>
-      <div class="skfx">${sk.fx}</div>
-      <div class="pips">${pips}</div>
-      <button class="ab big ${can ? 'gold' : ''}" data-act="skill" data-id="${sk.id}" ${maxed || !can ? 'disabled' : ''}>
-        ${maxed ? 'MAX' : `習得 ${cost}G`}</button>
-    </div>`;
+    gauge = `<div class="pips">${pips}</div>`;
   }
+  return `<div class="skcard ${can ? 'can' : ''} ${maxed ? 'maxed' : ''}">
+    <div class="skhead"><span class="skicon">${sk.icon}</span><b>${sk.n}</b></div>
+    <div class="skfx">${sk.fx}</div>
+    ${gauge}
+    <button class="ab big ${can ? 'gold' : ''}" data-act="skill" data-id="${sk.id}" ${maxed || !can ? 'disabled' : ''}>
+      ${maxed ? 'MAX' : `習得 ${cost}G`}</button>
+  </div>`;
+}
+function renderSkill(): void {
+  let h = `<div class="statbar">💰 所持 ${Math.floor(S.gold)}G — コインでスキルを習得して釣りを加速</div>`;
+  h += '<div class="sec" style="margin-top:0">恒久パッシブ（効果は無限・価格は逓増）</div><div class="skgrid">';
+  for (const sk of SKILLS.filter(s => s.max === undefined)) h += skillCard(sk);
+  h += '</div><div class="sec">アンロック</div><div class="skgrid">';
+  for (const sk of SKILLS.filter(s => s.max !== undefined)) h += skillCard(sk);
   h += '</div>';
   $('popBody').innerHTML = h;
 }
@@ -195,11 +250,12 @@ function renderAq(): void {
   }
   h += '</div>';
   if (S.aquaMax < 5) h += `<button class="ab big gold" data-act="aquaunlock" ${S.gold < 800 ? 'disabled' : ''}>🐠 水槽拡張 800G</button>`;
-  h += '<div class="sec">図鑑</div>';
+  h += `<div class="sec">図鑑${S.nushiWins > 0 ? `　<span class="r3">👑ヌシ討伐 ×${S.nushiWins}</span>` : ''}</div>`;
   SPOTS.forEach((spot, si) => {
     const list = SPECIES.filter(x => x.s === si);
     const got = list.filter(x => S.dex[x.id]).length;
-    h += `<div class="hintx" style="margin-top:6px"><b>${spot.n}</b> ${got}/${list.length}${dexComplete(si) ? ' ✅コンプ（レア率+5%）' : ''}</div><div class="dex">`;
+    const ml = masteryLv(si);
+    h += `<div class="hintx" style="margin-top:6px"><b>${spot.n}</b> ${got}/${list.length}${dexComplete(si) ? ' ✅コンプ（レア率+5%）' : ''}${ml > 0 ? `　📈熟練Lv${ml}` : ''}</div><div class="dex">`;
     list.forEach(x => {
       const d = S.dex[x.id];
       const cond = x.cond === 'rain' ? '☔雨限定' : x.cond === 'night' ? '🌙夜限定' : '';
@@ -246,7 +302,8 @@ function renderSet(): void {
   let h = '<div class="sec">釣り</div>';
   h += '<div class="setrow"><span class="lbl">釣り場</span><select data-set="spot">';
   SPOTS.forEach((sp, i) => {
-    h += `<option value="${i}" ${i === S.spot ? 'selected' : ''}>${S.unlocked[i] ? sp.n : `🔒${sp.n}（${sp.cost}G）`}</option>`;
+    const ml = masteryLv(i);
+    h += `<option value="${i}" ${i === S.spot ? 'selected' : ''}>${S.unlocked[i] ? `${sp.n}${ml > 0 ? `（熟練Lv${ml}）` : ''}` : `🔒${sp.n}（${sp.cost}G）`}</option>`;
   });
   h += '</select></div>';
   h += '<div class="setrow"><span class="lbl">餌</span><select data-set="bait">';
@@ -354,6 +411,17 @@ async function handleAct(act: string, d: DOMStringMap): Promise<void> {
     }
     case 'rodup': actRodUp(); break;
     case 'skill': buySkill(d.id ?? ''); break;
+    case 'enh': {
+      const e = selEquipRef(); if (!e) break;
+      if (actEnhance(e) === 'fail') toast('⚒ 強化失敗… 素材が砕けた');
+      break;
+    }
+    case 'reroll': {
+      const e = selEquipRef(); if (!e) break;
+      actReroll(e);
+      break;
+    }
+    case 'fuse': actFuse(+(d.r ?? 0)); break;
     case 'buy': {
       const l = mktCache.listings[i];
       const ok = await Market.buy(i);
