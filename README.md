@@ -83,6 +83,19 @@ npm run tauri build   # NSISインストーラ生成 → src-tauri/target/releas
   **市場は `MarketAPI`（非同期）経由のみ** — `market.ts` の `createSteamMarketAdapter()` スタブを実装して
   差し替えれば外部経済（RMT/Steam Market）に接続できる構成。
 
+## 配布（全OSビルド）
+
+タグ `v*` をプッシュすると GitHub Actions（[release.yml](.github/workflows/release.yml)）が
+**Windows（NSIS/MSI）・macOS（Universal .dmg）・Linux（AppImage/deb/rpm）** をビルドして
+[Releases](https://github.com/syuwa-oisi/fish_mock/releases) に添付する。
+
+```
+git tag v0.1.x && git push origin v0.1.x
+```
+
+コード署名は未設定（macOS は右クリック→開く、Windows は SmartScreen の「詳細情報」→実行で起動）。
+署名・公証・自動アップデートは Steam 配布検討時の課題。
+
 ## 既知の制限（デモ）
 
 - ポップアップ展開中はウィンドウ矩形が広がるため、その透明部分の下にあるデスクトップはクリックできない（閉じれば元どおり）。

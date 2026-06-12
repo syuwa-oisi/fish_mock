@@ -1,0 +1,74 @@
+# タグ v* のプッシュで Windows / macOS / Linux のインストーラをビルドし、
+# GitHub Release に添付する（tauri-action 標準構成）。
+# コード署名は未設定（macOS は Gatekeeper 警告、Windows は SmartScreen 警告が出る）。
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'        # Apple Silicon + Intel のユニバーサル
+            args: '--target universal-apple-darwin'
+          - platform: 'ubuntu-22.04'        # deb / rpm / AppImage
+            args: ''
+          - platform: 'windows-latest'      # nsis / msi
+            args: ''
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: idle-angler/src-tauri
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libgtk-3-dev
+
+      - name: install frontend dependencies
+        run: npm install
+        working-directory: idle-angler
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: idle-angler
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Idle Angler ${{ github.ref_name }}'
+          releaseBody: |
+            デスクトップ常駐型・放置釣りゲーのデモビルドです。
+
+            - Windows: `.exe`(NSIS) / `.msi`
+            - macOS: `.dmg`（Universal: Apple Silicon + Intel）
+            - Linux: `.AppImage` / `.deb` / `.rpm`
+
+            ⚠ コード署名は未設定のため、初回起動時にOSの警告が出ます。
+            macOS: 右クリック→開く / Windows: SmartScreen の「詳細情報」→実行
+          releaseDraft: false
+          prerelease: true
+          args: ${{ matrix.args }}
