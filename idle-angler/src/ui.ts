@@ -362,6 +362,8 @@ function toggleMenu(): void {
     m.style.display = 'none';
     if (!openPop) void setExpanded(false);
   } else {
+    // 開いているポップアップは閉じてからメニューを出す（重なり防止）
+    if (openPop) { openPop = null; $('popup').style.display = 'none'; }
     m.style.display = 'block';
     renderHud();
     void setExpanded(true);
